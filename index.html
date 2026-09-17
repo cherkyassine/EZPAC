@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Suivi Clients</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F5F4F0; --paper-raised:#FFFFFF; --ink:#1B1E24; --ink-soft:#5B6470; --ink-faint:#9AA1AA;
+    --line:#E2E0DA; --navy:#1F2B45; --navy-deep:#141B2E; --navy-tint:#E9ECF1; --brass:#93702F; --brass-tint:#F1E7D2;
+    --success:#2E6B4E; --success-tint:#DEEBE3; --danger:#A13B2E; --danger-tint:#F4E1DC; --amber:#95661E; --amber-tint:#F2E4CC;
+    --shadow: 0 1px 2px rgba(20,27,46,.06), 0 10px 28px -14px rgba(20,27,46,.22);
+    --font-head:'Fraunces', Georgia, serif; --font-body:'Inter', -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0F1216; --paper-raised:#171B21; --ink:#EBEDEF; --ink-soft:#9CA5AF; --ink-faint:#657079;
+      --line:#282E37; --navy:#4A5D85; --navy-deep:#8FA3CB; --navy-tint:#1B2434; --brass:#CBA55C; --brass-tint:#2B2416;
+      --success:#6FBE95; --success-tint:#152820; --danger:#E08876; --danger-tint:#2E1B18; --amber:#D7B26A; --amber-tint:#2B2415;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.55);
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5;min-height:100vh;}
+  ::selection{background:var(--brass-tint);}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;}
+  a{color:inherit;}
+
+  .appbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--navy-deep);color:#F3F1EA;}
+  .appbar h1{font-family:var(--font-head);font-weight:600;font-size:19px;margin:0;letter-spacing:-0.01em;}
+  .appbar .mark{width:32px;height:32px;border-radius:8px;background:var(--brass);color:#211705;display:flex;align-items:center;justify-content:center;font-family:var(--font-head);font-weight:700;font-size:14px;flex:none;}
+  .appbar .spacer{flex:1;}
+  .appbar .bar-btn{background:rgba(255,255,255,.1);border:none;color:#F3F1EA;border-radius:8px;padding:7px 11px;font-size:12.5px;cursor:pointer;font-weight:600;}
+  .appbar .bar-btn:hover{background:rgba(255,255,255,.18);}
+  .back-btn{display:none;border:none;background:none;color:#F3F1EA;font-size:20px;padding:4px 8px;margin-left:-6px;cursor:pointer;border-radius:8px;}
+
+  .shell{display:grid;grid-template-columns: 360px 1fr;max-width:1220px;margin:0 auto;min-height:calc(100vh - 61px);}
+  .col-list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;}
+  .col-detail{min-width:0;}
+  @media (max-width: 860px){
+    .shell{grid-template-columns:1fr;max-width:none;}
+    .col-list{border-right:none;}
+    .shell[data-mobile-view="detail"] .col-list{display:none;}
+    .shell[data-mobile-view="list"] .col-detail{display:none;}
+    .back-btn{display:inline-block;}
+  }
+  @media (min-width:861px){ .back-btn{display:none !important;} }
+
+  .list-toolbar{padding:16px 16px 10px;display:flex;flex-direction:column;gap:10px;}
+  .search{display:flex;align-items:center;gap:8px;background:var(--paper-raised);border:1px solid var(--line);border-radius:10px;padding:9px 12px;}
+  .search input{border:none;outline:none;background:none;color:var(--ink);width:100%;font-size:14px;}
+  .btn{border:1px solid transparent;border-radius:9px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;}
+  .btn:active{transform:scale(.98);}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-ghost{background:transparent;color:var(--ink);border-color:var(--line);}
+  .btn-ghost:hover{background:var(--navy-tint);}
+  .btn-block{width:100%;}
+  .btn-sm{padding:6px 10px;font-size:12.5px;}
+  .btn[disabled]{opacity:.5;cursor:default;}
+
+  .client-list{overflow-y:auto;padding:4px 10px 90px;flex:1;}
+  .client-card{padding:12px;border-radius:11px;cursor:pointer;display:flex;flex-direction:column;gap:4px;border:1px solid transparent;margin-bottom:2px;}
+  .client-card:hover{background:var(--paper-raised);}
+  .client-card.active{background:var(--navy-tint);border-color:var(--navy);}
+  .client-card .name{font-weight:600;font-size:14.5px;}
+  .client-card .meta{font-size:12.5px;color:var(--ink-soft);display:flex;gap:8px;flex-wrap:wrap;}
+  .client-card .ice{font-size:11px;color:var(--ink-faint);}
+  .empty-hint{color:var(--ink-faint);font-size:13.5px;text-align:center;padding:40px 20px;}
+  .fab-wrap{padding:12px 16px 16px;border-top:1px solid var(--line);}
+
+  .detail-inner{padding:22px 24px 60px;max-width:780px;}
+  .placeholder{display:flex;align-items:center;justify-content:center;height:100%;min-height:400px;color:var(--ink-faint);font-family:var(--font-head);font-size:17px;text-align:center;padding:40px;}
+  .client-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:6px;border-bottom:1px solid var(--line);padding-bottom:16px;}
+  .client-head h2{font-family:var(--font-head);font-size:25px;font-weight:600;margin:0 0 4px;}
+  .client-head .sub{color:var(--ink-soft);font-size:13px;}
+  .head-actions{display:flex;gap:8px;flex:none;}
+  .icon-btn{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:6px;border-radius:8px;font-size:16px;line-height:1;}
+  .icon-btn:hover{background:var(--paper);color:var(--ink);}
+
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:11px;overflow:hidden;margin:18px 0 6px;}
+  @media (max-width:520px){ .info-grid{grid-template-columns:1fr;} }
+  .info-item{background:var(--paper-raised);padding:11px 14px;}
+  .info-item .lbl{font-size:11px;color:var(--ink-faint);margin-bottom:3px;}
+  .info-item .val{font-size:14px;word-break:break-word;}
+  .info-item .val a{color:var(--navy);text-decoration:none;font-weight:600;}
+  .notes-block{margin-top:14px;padding:12px 14px;background:var(--paper-raised);border:1px solid var(--line);border-radius:10px;font-size:13.5px;color:var(--ink-soft);white-space:pre-wrap;}
+
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin:28px 0 12px;}
+  .section-head h3{font-family:var(--font-head);font-size:17px;font-weight:600;margin:0;}
+
+  .order-card{border:1px solid var(--line);border-radius:12px;background:var(--paper-raised);margin-bottom:12px;overflow:hidden;}
+  .order-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:13px 14px;cursor:pointer;}
+  .order-title{font-weight:600;font-size:14.5px;margin-bottom:3px;}
+  .order-sub{font-size:12.5px;color:var(--ink-faint);}
+  .status-pill{font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;white-space:nowrap;flex:none;}
+  .status-Nouveau{background:var(--navy-tint);color:var(--navy);}
+  .status-EnCours{background:var(--amber-tint);color:var(--amber);}
+  .status-Termine{background:var(--success-tint);color:var(--success);}
+  .status-Annule{background:var(--danger-tint);color:var(--danger);}
+  .order-body{padding:0 14px 16px;border-top:1px solid var(--line);display:none;}
+  .order-body.open{display:block;padding-top:12px;}
+  .order-desc{font-size:13.5px;color:var(--ink-soft);white-space:pre-wrap;margin-bottom:12px;}
+  .order-row{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+  .status-select{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--paper-raised);color:var(--ink);}
+  .files-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+  .file-chip{display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 10px;background:var(--paper);border:1px solid var(--line);border-radius:8px;}
+  .file-chip a{color:var(--navy);text-decoration:none;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .file-chip .size{color:var(--ink-faint);font-size:11.5px;flex:none;}
+  .upload-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
+  .upload-row input[type=file]{font-size:12.5px;max-width:100%;}
+  .hint{font-size:11.5px;color:var(--ink-faint);}
+  .history{border-top:1px dashed var(--line);padding-top:10px;margin-top:12px;}
+  .history .h-title{font-size:11px;color:var(--ink-faint);margin-bottom:8px;}
+  .h-item{display:flex;gap:10px;font-size:12.5px;margin-bottom:6px;color:var(--ink-soft);}
+  .h-dot{width:6px;height:6px;border-radius:50%;background:var(--navy);margin-top:5px;flex:none;}
+  .h-when{color:var(--ink-faint);}
+
+  .overlay{position:fixed;inset:0;background:rgba(15,18,22,.5);display:none;align-items:flex-end;justify-content:center;z-index:50;}
+  .overlay.open{display:flex;}
+  @media (min-width:640px){ .overlay{align-items:center;} }
+  .modal{background:var(--paper-raised);width:100%;max-width:500px;border-radius:16px 16px 0 0;padding:20px 20px 26px;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow);}
+  @media (min-width:640px){ .modal{border-radius:14px;} }
+  .modal h3{font-family:var(--font-head);font-size:19px;margin:0 0 14px;}
+  .field{margin-bottom:13px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;}
+  .field input, .field textarea, .field select{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--paper);color:var(--ink);outline:none;}
+  .field input:focus, .field textarea:focus, .field select:focus{border-color:var(--navy);}
+  .field textarea{resize:vertical;min-height:64px;}
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+  .modal-actions{display:flex;gap:10px;margin-top:6px;}
+  .modal-actions .btn{flex:1;}
+  .loc-box{border:1px solid var(--line);border-radius:11px;padding:12px 12px 4px;background:var(--paper);}
+  .btn-gold{background:var(--brass);color:#211705;}
+  .btn-gold:hover{filter:brightness(1.05);}
+  .scan-box{border:1px dashed var(--line);border-radius:11px;padding:14px;margin-bottom:16px;background:var(--navy-tint);}
+  .scan-box .scan-title{font-size:12.5px;font-weight:700;margin-bottom:3px;color:var(--navy);}
+  .scan-box .scan-sub{font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;}
+  .scan-box .scan-status{font-size:11.5px;color:var(--ink-soft);margin-top:8px;min-height:14px;}
+  .loc-status{font-size:11.5px;color:var(--ink-faint);margin:6px 0 8px;}
+  .loc-status.ok{color:var(--success);}
+  .loc-status.err{color:var(--danger);}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:99px;font-size:13px;z-index:100;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s ease;max-width:88vw;text-align:center;}
+  .toast.show{opacity:1;}
+
+  .setup{max-width:520px;margin:60px auto;padding:26px 24px;background:var(--paper-raised);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);}
+  .setup h2{font-family:var(--font-head);font-size:21px;margin:0 0 6px;}
+  .setup p{font-size:13.5px;color:var(--ink-soft);margin:0 0 18px;}
+  .sync-dot{width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;margin-right:6px;}
+</style>
+</head>
+<body>
+
+<div class="appbar">
+  <button class="back-btn" id="backBtn" aria-label="Retour">←</button>
+  <div class="mark">CS</div>
+  <h1>Suivi Clients</h1>
+  <div class="spacer"></div>
+  <button class="bar-btn" id="refreshBtn" title="Actualiser">↻</button>
+  <button class="bar-btn" id="settingsBtn" title="Configuration">⚙</button>
+</div>
+
+<div id="setupScreen" class="setup" style="display:none;">
+  <h2>Connexion à votre Google Sheet</h2>
+  <p>Collez l'adresse du service Google Apps Script que vous avez déployé, puis votre clé d'accès. Ces informations restent sur cet appareil.</p>
+  <div class="field">
+    <label>URL du service (se termine par /exec)</label>
+    <input id="setupUrl" placeholder="https://script.google.com/macros/s/.../exec">
+  </div>
+  <div class="field">
+    <label>Clé d'accès</label>
+    <input id="setupKey" placeholder="La phrase secrète définie dans Code.gs">
+  </div>
+  <button class="btn btn-primary btn-block" id="setupSaveBtn">Connecter</button>
+  <div class="hint" id="setupStatus" style="margin-top:12px;text-align:center;"></div>
+</div>
+
+<div class="shell" id="shell" data-mobile-view="list" style="display:none;">
+  <div class="col-list">
+    <div class="list-toolbar">
+      <div class="search">
+        <span>🔎</span>
+        <input id="searchInput" placeholder="Rechercher un client, ICE, téléphone…">
+      </div>
+    </div>
+    <div class="client-list" id="clientList"></div>
+    <div class="fab-wrap">
+      <button class="btn btn-primary btn-block" id="newClientBtn">+ Nouveau client</button>
+    </div>
+  </div>
+  <div class="col-detail" id="colDetail">
+    <div class="placeholder">Sélectionnez un client<br>ou créez-en un nouveau.</div>
+  </div>
+</div>
+
+<!-- Client modal -->
+<div class="overlay" id="clientOverlay">
+  <div class="modal">
+    <h3 id="clientModalTitle">Nouveau client</h3>
+
+    <div class="scan-box">
+      <div class="scan-title">📇 Scanner une carte de visite</div>
+      <div class="scan-sub">Photographiez ou importez une carte : les champs seront pré-remplis. Vérifiez toujours avant d'enregistrer.</div>
+      <input type="file" id="cardInput" accept="image/*" capture="environment" style="display:none;">
+      <button type="button" class="btn btn-gold btn-sm" id="scanBtn">Choisir une image</button>
+      <div class="scan-status" id="scanStatus"></div>
+      <details id="scanRawWrap" style="display:none;margin-top:8px;">
+        <summary class="hint" style="cursor:pointer;">Voir le texte lu sur la carte</summary>
+        <pre id="scanRaw" style="white-space:pre-wrap;font-size:11.5px;color:var(--ink-soft);margin:8px 0 0;font-family:inherit;"></pre>
+      </details>
+    </div>
+
+    <form id="clientForm">
+      <div class="field">
+        <label>Nom du client / société *</label>
+        <input id="cName" required placeholder="Nom complet ou raison sociale">
+      </div>
+      <div class="field-row">
+        <div class="field"><label>ICE</label><input id="cIce" placeholder="Identifiant commun"></div>
+        <div class="field"><label>Personne à contacter</label><input id="cContact" placeholder="Nom du contact"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Téléphone</label><input id="cPhone" type="tel" placeholder="06 12 34 56 78"></div>
+        <div class="field"><label>Email</label><input id="cEmail" type="email" placeholder="client@exemple.com"></div>
+      </div>
+      <div class="field"><label>Adresse</label><input id="cAddress" placeholder="Adresse, ville"></div>
+      <div class="field">
+        <label>Localisation</label>
+        <div class="loc-box">
+          <div class="field" style="margin-bottom:8px;">
+            <label style="font-weight:500;">Coordonnées GPS</label>
+            <input id="cLocInput" placeholder="ex : 33.5731, -7.5898">
+          </div>
+          <div class="hint" style="margin:-6px 0 10px;">Dans Google Maps : appui long sur l'endroit → « Copier les coordonnées » → collez ici.</div>
+          <button type="button" class="btn btn-ghost btn-sm" id="applyLocBtn" style="margin-bottom:10px;">Appliquer</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="gpsBtn" style="margin:0 0 10px 6px;">📍 Ma position</button>
+          <div class="loc-status" id="locStatus"></div>
+        </div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="cNotes" placeholder="Informations complémentaires…"></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancelClientBtn">Annuler</button>
+        <button type="submit" class="btn btn-primary" id="saveClientBtn">Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Order modal -->
+<div class="overlay" id="orderOverlay">
+  <div class="modal">
+    <h3>Nouvelle commande</h3>
+    <form id="orderForm">
+      <div class="field"><label>Titre *</label><input id="oTitle" required placeholder="Ex : Commande de sacs 25kg"></div>
+      <div class="field"><label>Description</label><textarea id="oDesc" placeholder="Détails de la commande…"></textarea></div>
+      <div class="field-row">
+        <div class="field"><label>Montant</label><input id="oAmount" type="number" step="0.01" placeholder="0.00"></div>
+        <div class="field"><label>Devise</label>
+          <select id="oCurrency"><option>MAD</option><option>EUR</option><option>USD</option></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancelOrderBtn">Annuler</button>
+        <button type="submit" class="btn btn-primary" id="saveOrderBtn">Créer la commande</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var CFG = { url:"", key:"" };
+  var clients = [], orders = [], currentClientId = null, editingClientId = null;
+  var openOrderIds = {};
+  var STATUSES = ["Nouveau","En cours","Terminé","Annulé"];
+
+  function $(id){ return document.getElementById(id); }
+  function statusClass(s){ return "status-" + (s||"Nouveau").replace(/\s+/g,"").normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+  function toast(msg){
+    var t=$("toast"); t.textContent=msg; t.classList.add("show");
+    clearTimeout(t._h); t._h=setTimeout(function(){t.classList.remove("show");},2600);
+  }
+  function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];}); }
+  function fmtDate(iso){
+    if(!iso) return "";
+    try{ var d=new Date(iso); if(isNaN(d)) return String(iso);
+      return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"})+" · "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+    }catch(e){ return String(iso); }
+  }
+  function fmtSize(b){ if(b==null||b==="") return ""; b=Number(b); if(b<1024) return b+" o"; if(b<1048576) return Math.round(b/1024)+" Ko"; return (b/1048576).toFixed(1)+" Mo"; }
+  function parseLatLng(str){
+    if(!str) return null; str=str.trim();
+    var m=str.match(/@(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/); if(m) return {lat:+m[1],lng:+m[2]};
+    m=str.match(/[?&](?:q|ll|query)=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/); if(m) return {lat:+m[1],lng:+m[2]};
+    m=str.match(/^(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/); if(m) return {lat:+m[1],lng:+m[2]};
+    return null;
+  }
+
+  // ---------- API ----------
+  function api(payload){
+    payload.cle = CFG.key;
+    return fetch(CFG.url, {
+      method:"POST",
+      // text/plain évite la requête preflight refusée par Apps Script
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify(payload)
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(!res || !res.ok) throw new Error((res && res.error) || "Erreur du service");
+      return res;
+    });
+  }
+
+  // ---------- Config ----------
+  function loadCfg(){
+    try{
+      CFG.url = localStorage.getItem("sc_url") || "";
+      CFG.key = localStorage.getItem("sc_key") || "";
+    }catch(e){}
+  }
+  function saveCfg(u,k){
+    CFG.url=u; CFG.key=k;
+    try{ localStorage.setItem("sc_url",u); localStorage.setItem("sc_key",k); }catch(e){}
+  }
+  function showSetup(){
+    $("setupScreen").style.display="block";
+    $("shell").style.display="none";
+    $("setupUrl").value = CFG.url;
+    $("setupKey").value = CFG.key;
+  }
+  function showApp(){
+    $("setupScreen").style.display="none";
+    $("shell").style.display="grid";
+  }
+
+  $("settingsBtn").addEventListener("click", showSetup);
+  $("setupSaveBtn").addEventListener("click", function(){
+    var u=$("setupUrl").value.trim(), k=$("setupKey").value.trim();
+    if(!u || u.indexOf("/exec")===-1){ $("setupStatus").textContent="L'URL doit se terminer par /exec."; return; }
+    $("setupStatus").textContent="Connexion…";
+    var prev={url:CFG.url,key:CFG.key};
+    CFG.url=u; CFG.key=k;
+    api({action:"ping"}).then(function(){
+      saveCfg(u,k);
+      $("setupStatus").textContent="Connecté.";
+      showApp(); refresh();
+    }).catch(function(e){
+      CFG.url=prev.url; CFG.key=prev.key;
+      $("setupStatus").textContent="Échec : "+e.message+" — vérifiez l'URL, la clé, et que le déploiement autorise « Tout le monde ».";
+    });
+  });
+
+  // ---------- Data ----------
+  function refresh(){
+    if(!CFG.url) return;
+    $("refreshBtn").textContent="…";
+    return api({action:"load"}).then(function(res){
+      clients = res.clients || [];
+      orders = res.orders || [];
+      clients.sort(function(a,b){ return String(a.name||"").localeCompare(String(b.name||""),"fr"); });
+      renderClientList(); renderDetail();
+      $("refreshBtn").textContent="↻";
+    }).catch(function(e){
+      $("refreshBtn").textContent="↻";
+      toast("Chargement impossible : "+e.message);
+    });
+  }
+  function ordersOf(clientId){
+    return orders.filter(function(o){ return String(o.clientId)===String(clientId); })
+      .sort(function(a,b){ return String(b.createdAt).localeCompare(String(a.createdAt)); });
+  }
+
+  // ---------- List ----------
+  function renderClientList(){
+    var q=($("searchInput").value||"").toLowerCase().trim();
+    var list=clients.filter(function(c){
+      if(!q) return true;
+      return [c.name,c.phone,c.email,c.address,c.iceNumber,c.contactPerson].some(function(v){
+        return v && String(v).toLowerCase().indexOf(q)!==-1; });
+    });
+    var el=$("clientList");
+    if(!list.length){
+      el.innerHTML='<div class="empty-hint">'+(clients.length?"Aucun client ne correspond.":"Aucun client pour l'instant.<br>Ajoutez votre premier client.")+'</div>';
+      return;
+    }
+    el.innerHTML=list.map(function(c){
+      return '<div class="client-card'+(c.id===currentClientId?" active":"")+'" data-id="'+esc(c.id)+'">'
+        +'<div class="name">'+esc(c.name)+'</div><div class="meta">'
+        +(c.contactPerson?'<span>👤 '+esc(c.contactPerson)+'</span>':'')
+        +(c.phone?'<span>📞 '+esc(c.phone)+'</span>':'')
+        +'</div>'+(c.iceNumber?'<div class="ice">ICE '+esc(c.iceNumber)+'</div>':'')+'</div>';
+    }).join("");
+    Array.prototype.forEach.call(el.querySelectorAll(".client-card"),function(card){
+      card.addEventListener("click",function(){ openClient(card.getAttribute("data-id")); });
+    });
+  }
+  function openClient(id){
+    currentClientId=id; renderClientList(); renderDetail();
+    $("shell").setAttribute("data-mobile-view","detail");
+  }
+
+  // ---------- Detail ----------
+  function renderDetail(){
+    var el=$("colDetail");
+    if(!currentClientId){ el.innerHTML='<div class="placeholder">Sélectionnez un client<br>ou créez-en un nouveau.</div>'; return; }
+    var c=clients.find(function(x){return String(x.id)===String(currentClientId);});
+    if(!c){ el.innerHTML='<div class="placeholder">Client introuvable.</div>'; return; }
+    var os=ordersOf(c.id);
+    var mapLink = (c.lat!=null && c.lng!=null && c.lat!=="" ) ? '<a href="https://www.google.com/maps?q='+c.lat+','+c.lng+'" target="_blank" rel="noopener">Voir sur la carte ↗</a>' : "";
+
+    var h='<div class="detail-inner">';
+    h+='<div class="client-head"><div><h2>'+esc(c.name)+'</h2><div class="sub">Client depuis le '+fmtDate(c.createdAt)+'</div></div>';
+    h+='<div class="head-actions"><button class="icon-btn" id="editClientBtn" title="Modifier">✎</button>';
+    h+='<button class="icon-btn" id="deleteClientBtn" title="Supprimer">🗑</button></div></div>';
+    h+='<div class="info-grid">';
+    h+='<div class="info-item"><div class="lbl">ICE</div><div class="val">'+(c.iceNumber?esc(c.iceNumber):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Personne à contacter</div><div class="val">'+(c.contactPerson?esc(c.contactPerson):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Téléphone</div><div class="val">'+(c.phone?'<a href="tel:'+esc(c.phone)+'">'+esc(c.phone)+'</a>':'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Email</div><div class="val">'+(c.email?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Adresse</div><div class="val">'+(c.address?esc(c.address):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Localisation GPS</div><div class="val">'+(mapLink||'—')+'</div></div>';
+    h+='</div>';
+    if(c.notes) h+='<div class="notes-block">'+esc(c.notes)+'</div>';
+    h+='<div class="section-head"><h3>Commandes ('+os.length+')</h3><button class="btn btn-primary btn-sm" id="newOrderBtn">+ Commande</button></div>';
+    if(!os.length) h+='<div class="empty-hint">Aucune commande enregistrée pour ce client.</div>';
+    else os.forEach(function(o){ h+=renderOrderCard(o); });
+    h+='</div>';
+    el.innerHTML=h;
+
+    $("editClientBtn").addEventListener("click",function(){ openClientModal(c); });
+    $("deleteClientBtn").addEventListener("click",function(){ deleteClient(c); });
+    $("newOrderBtn").addEventListener("click", openOrderModal);
+    os.forEach(function(o){
+      var top=$("otop-"+o.id); if(top) top.addEventListener("click",function(){ openOrderIds[o.id]=!openOrderIds[o.id]; renderDetail(); });
+      wireOrder(o);
+    });
+  }
+
+  function renderOrderCard(o){
+    var files=o.files||[], hist=o.statusHistory||[];
+    var amt=(o.amount!=null&&o.amount!=="")?(Number(o.amount).toLocaleString("fr-FR")+" "+(o.currency||"MAD")):"";
+    var h='<div class="order-card"><div class="order-top" id="otop-'+esc(o.id)+'">';
+    h+='<div><div class="order-title">'+esc(o.title)+'</div><div class="order-sub">'+fmtDate(o.createdAt)+(amt?' · '+amt:'')+'</div></div>';
+    h+='<span class="status-pill '+statusClass(o.status)+'">'+esc(o.status||"Nouveau")+'</span></div>';
+    h+='<div class="order-body'+(openOrderIds[o.id]?' open':'')+'">';
+    if(o.description) h+='<div class="order-desc">'+esc(o.description)+'</div>';
+    h+='<div class="order-row"><label class="hint" style="margin-right:4px;">Statut :</label><select class="status-select" id="ost-'+esc(o.id)+'">';
+    STATUSES.forEach(function(s){ h+='<option'+((o.status||"Nouveau")===s?' selected':'')+'>'+s+'</option>'; });
+    h+='</select><button class="btn btn-ghost btn-sm" id="odel-'+esc(o.id)+'">Supprimer</button></div>';
+    h+='<div class="files-list">';
+    files.forEach(function(f){
+      h+='<div class="file-chip">📎 <a href="'+esc(f.url)+'" target="_blank" rel="noopener">'+esc(f.name)+'</a><span class="size">'+fmtSize(f.sizeBytes)+'</span></div>';
+    });
+    h+='</div><div class="upload-row"><input type="file" multiple id="ofile-'+esc(o.id)+'">';
+    h+='<button type="button" class="btn btn-ghost btn-sm" id="oup-'+esc(o.id)+'">Joindre</button></div>';
+    h+='<div class="hint" style="margin-bottom:12px;">Les fichiers sont enregistrés dans votre Google Drive.</div>';
+    if(hist.length){
+      h+='<div class="history"><div class="h-title">Historique</div>';
+      hist.slice().reverse().forEach(function(x){
+        h+='<div class="h-item"><span class="h-dot"></span><span><strong>'+esc(x.status)+'</strong> — <span class="h-when">'+fmtDate(x.at)+'</span></span></div>';
+      });
+      h+='</div>';
+    }
+    return h+'</div></div>';
+  }
+
+  function wireOrder(o){
+    var sel=$("ost-"+o.id);
+    if(sel){
+      sel.addEventListener("click",function(e){e.stopPropagation();});
+      sel.addEventListener("change",function(e){
+        e.stopPropagation();
+        var ns=sel.value; if(ns===o.status) return;
+        var hist=(o.statusHistory||[]).slice(); hist.push({status:ns,at:new Date().toISOString()});
+        var upd=Object.assign({},o,{status:ns,statusHistory:hist});
+        api({action:"saveOrder",order:upd}).then(function(){ toast("Statut mis à jour"); refresh(); })
+          .catch(function(e2){ toast("Échec : "+e2.message); });
+      });
+    }
+    var del=$("odel-"+o.id);
+    if(del) del.addEventListener("click",function(e){
+      e.stopPropagation();
+      if(!confirm('Supprimer la commande "'+o.title+'" ?')) return;
+      api({action:"deleteOrder",id:o.id}).then(function(){ toast("Commande supprimée"); refresh(); })
+        .catch(function(e2){ toast("Échec : "+e2.message); });
+    });
+    var up=$("oup-"+o.id), fi=$("ofile-"+o.id);
+    if(up) up.addEventListener("click",function(e){
+      e.stopPropagation();
+      if(!fi.files || !fi.files.length){ toast("Choisissez d'abord un fichier"); return; }
+      uploadFiles(o, fi.files, up);
+    });
+  }
+
+  function readBase64(file){
+    return new Promise(function(res,rej){
+      var r=new FileReader();
+      r.onload=function(){ res(String(r.result).split(",")[1]); };
+      r.onerror=function(){ rej(new Error("lecture impossible")); };
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function uploadFiles(o, fileList, btn){
+    btn.disabled=true; btn.textContent="Envoi…";
+    var nf=(o.files||[]).slice(), ok=0;
+    for(var i=0;i<fileList.length;i++){
+      var f=fileList[i];
+      if(f.size > 20*1024*1024){ toast("Trop volumineux (max 20 Mo) : "+f.name); continue; }
+      try{
+        var b64=await readBase64(f);
+        var res=await api({action:"uploadFile", filename:f.name, mimeType:f.type||"application/octet-stream", data:b64});
+        nf.push(res.file); ok++;
+      }catch(e){ toast("Échec : "+f.name); }
+    }
+    if(ok){
+      try{
+        await api({action:"saveOrder", order:Object.assign({},o,{files:nf})});
+        toast(ok+" fichier(s) ajouté(s)");
+        await refresh();
+      }catch(e){ toast("Fichiers envoyés mais non liés"); }
+    }
+    btn.disabled=false; btn.textContent="Joindre";
+  }
+
+  // ---------- Scan carte de visite ----------
+  $("scanBtn").addEventListener("click", function(){ $("cardInput").click(); });
+  $("cardInput").addEventListener("change", async function(){
+    var file = this.files && this.files[0];
+    this.value = "";
+    if(!file) return;
+    var btn=$("scanBtn"); btn.disabled=true; btn.textContent="Lecture…";
+    $("scanStatus").textContent = "Envoi de l'image à votre Google Drive pour lecture…";
+    $("scanRawWrap").style.display="none";
+    try{
+      var b64 = await readBase64(file);
+      var res = await api({action:"scanCard", mimeType:file.type||"image/jpeg", data:b64});
+      if(!res.champs){
+        $("scanStatus").textContent = res.message || "Aucun texte lisible sur cette image.";
+      } else {
+        var f = res.champs, n = 0;
+        function remplir(id, val){ if(val && !$(id).value.trim()){ $(id).value=String(val).trim(); n++; } }
+        remplir("cName", f.name);
+        remplir("cIce", f.iceNumber);
+        remplir("cContact", f.contactPerson);
+        remplir("cPhone", f.phone);
+        remplir("cEmail", f.email);
+        remplir("cAddress", f.address);
+        $("scanStatus").textContent = n ? (n+" champ(s) rempli(s) — vérifiez et corrigez si besoin.") : "Texte lu, mais aucun champ vide à remplir.";
+      }
+      if(res.texte){
+        $("scanRaw").textContent = res.texte;
+        $("scanRawWrap").style.display = "block";
+      }
+    }catch(e){
+      $("scanStatus").textContent = "Échec : " + e.message;
+    }
+    btn.disabled=false; btn.textContent="Choisir une image";
+  });
+
+  // ---------- Client modal ----------
+  var pendingLoc={lat:null,lng:null};
+  function setLocStatus(m,k){ var el=$("locStatus"); el.textContent=m; el.className="loc-status"+(k?" "+k:""); }
+
+  function openClientModal(ex){
+    editingClientId=ex?ex.id:null;
+    $("clientModalTitle").textContent=ex?"Modifier le client":"Nouveau client";
+    $("cName").value=ex?(ex.name||""):"";
+    $("cIce").value=ex?(ex.iceNumber||""):"";
+    $("cContact").value=ex?(ex.contactPerson||""):"";
+    $("cPhone").value=ex?(ex.phone||""):"";
+    $("cEmail").value=ex?(ex.email||""):"";
+    $("cAddress").value=ex?(ex.address||""):"";
+    $("cNotes").value=ex?(ex.notes||""):"";
+    $("cLocInput").value="";
+    pendingLoc.lat=(ex&&ex.lat!=null&&ex.lat!=="")?Number(ex.lat):null;
+    pendingLoc.lng=(ex&&ex.lng!=null&&ex.lng!=="")?Number(ex.lng):null;
+    setLocStatus(pendingLoc.lat!=null?("Position enregistrée ("+pendingLoc.lat.toFixed(4)+", "+pendingLoc.lng.toFixed(4)+")"):"", pendingLoc.lat!=null?"ok":"");
+    $("scanStatus").textContent="";
+    $("scanRawWrap").style.display="none";
+    $("clientOverlay").classList.add("open");
+    setTimeout(function(){ $("cName").focus(); },50);
+  }
+  function closeClientModal(){ $("clientOverlay").classList.remove("open"); editingClientId=null; }
+  $("newClientBtn").addEventListener("click",function(){ openClientModal(null); });
+  $("cancelClientBtn").addEventListener("click", closeClientModal);
+  $("clientOverlay").addEventListener("click",function(e){ if(e.target===this) closeClientModal(); });
+
+  $("applyLocBtn").addEventListener("click",function(){
+    var v=$("cLocInput").value.trim();
+    if(!v){ setLocStatus("Collez d'abord des coordonnées.","err"); return; }
+    var p=parseLatLng(v);
+    if(!p){
+      if(/goo\.gl|maps\.app|g\.co\//i.test(v)) setLocStatus("Lien de partage court : il ne contient pas les coordonnées. Utilisez « Copier les coordonnées » dans Google Maps.","err");
+      else setLocStatus("Format non reconnu. Exemple : 33.5731, -7.5898","err");
+      return;
+    }
+    pendingLoc.lat=p.lat; pendingLoc.lng=p.lng; $("cLocInput").value="";
+    setLocStatus("Position appliquée ("+p.lat.toFixed(4)+", "+p.lng.toFixed(4)+")","ok");
+  });
+
+  $("gpsBtn").addEventListener("click",function(){
+    if(!navigator.geolocation){ setLocStatus("Géolocalisation indisponible sur ce navigateur.","err"); return; }
+    setLocStatus("Localisation en cours…","");
+    navigator.geolocation.getCurrentPosition(function(pos){
+      pendingLoc.lat=pos.coords.latitude; pendingLoc.lng=pos.coords.longitude;
+      setLocStatus("Position détectée ("+pendingLoc.lat.toFixed(4)+", "+pendingLoc.lng.toFixed(4)+")","ok");
+    },function(){
+      setLocStatus("Position refusée ou indisponible. Utilisez les coordonnées ci-dessus.","err");
+    },{enableHighAccuracy:true,timeout:10000});
+  });
+
+  $("clientForm").addEventListener("submit",function(e){
+    e.preventDefault();
+    var name=$("cName").value.trim();
+    if(!name){ toast("Le nom est obligatoire"); return; }
+    var c={
+      id: editingClientId || "",
+      name:name,
+      iceNumber:$("cIce").value.trim(),
+      contactPerson:$("cContact").value.trim(),
+      phone:$("cPhone").value.trim(),
+      email:$("cEmail").value.trim(),
+      address:$("cAddress").value.trim(),
+      notes:$("cNotes").value.trim(),
+      lat:pendingLoc.lat, lng:pendingLoc.lng
+    };
+    var btn=$("saveClientBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
+    api({action:"saveClient",client:c}).then(function(res){
+      closeClientModal(); toast(editingClientId?"Client mis à jour":"Client créé");
+      var nid=res.id;
+      return refresh().then(function(){ if(nid) openClient(nid); });
+    }).catch(function(err){ toast("Échec : "+err.message); })
+      .then(function(){ btn.disabled=false; btn.textContent="Enregistrer"; });
+  });
+
+  function deleteClient(c){
+    if(!confirm('Supprimer "'+c.name+'" et toutes ses commandes ?')) return;
+    api({action:"deleteClient",id:c.id}).then(function(){
+      currentClientId=null; $("shell").setAttribute("data-mobile-view","list");
+      toast("Client supprimé"); refresh();
+    }).catch(function(e){ toast("Échec : "+e.message); });
+  }
+
+  // ---------- Order modal ----------
+  function openOrderModal(){
+    $("oTitle").value=""; $("oDesc").value=""; $("oAmount").value=""; $("oCurrency").value="MAD";
+    $("orderOverlay").classList.add("open");
+    setTimeout(function(){ $("oTitle").focus(); },50);
+  }
+  function closeOrderModal(){ $("orderOverlay").classList.remove("open"); }
+  $("cancelOrderBtn").addEventListener("click", closeOrderModal);
+  $("orderOverlay").addEventListener("click",function(e){ if(e.target===this) closeOrderModal(); });
+
+  $("orderForm").addEventListener("submit",function(e){
+    e.preventDefault();
+    var t=$("oTitle").value.trim();
+    if(!t){ toast("Le titre est obligatoire"); return; }
+    var o={
+      clientId: currentClientId, title:t,
+      description:$("oDesc").value.trim(),
+      amount: $("oAmount").value?Number($("oAmount").value):null,
+      currency:$("oCurrency").value, status:"Nouveau"
+    };
+    var btn=$("saveOrderBtn"); btn.disabled=true; btn.textContent="Création…";
+    api({action:"saveOrder",order:o}).then(function(){
+      closeOrderModal(); toast("Commande créée"); return refresh();
+    }).catch(function(err){ toast("Échec : "+err.message); })
+      .then(function(){ btn.disabled=false; btn.textContent="Créer la commande"; });
+  });
+
+  // ---------- Nav ----------
+  $("backBtn").addEventListener("click",function(){ $("shell").setAttribute("data-mobile-view","list"); });
+  $("searchInput").addEventListener("input", renderClientList);
+  $("refreshBtn").addEventListener("click", refresh);
+
+  loadCfg();
+  if(CFG.url){ showApp(); refresh(); } else { showSetup(); }
+})();
+</script>
+</body>
+</html>
