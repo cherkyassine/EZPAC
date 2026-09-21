@@ -200,6 +200,7 @@
   <h1>EZPAC CRM</h1>
   <span class="role-tag" id="roleTag" style="display:none;">Lecture seule</span>
   <div class="spacer"></div>
+  <button class="bar-btn" id="globalSearchBtn" title="Recherche globale">🔍</button>
   <button class="bar-btn" id="dashBtn" title="Tableau de bord">📊</button>
   <button class="bar-btn" id="refreshBtn" title="Actualiser">↻</button>
   <button class="bar-btn" id="companyBtn" title="Coordonnées de l'entreprise" data-mut="1">🏢</button>
@@ -216,7 +217,10 @@
 </div>
 
 <div id="dashScreen" class="dash" style="display:none;">
-  <h2>Tableau de bord</h2>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+    <h2 style="margin:0;">Tableau de bord</h2>
+    <button type="button" class="btn btn-ghost btn-sm" id="backupBtn">💾 Sauvegarde complète</button>
+  </div>
   <div class="kpis" id="kpiRow"></div>
   <div class="dash-card">
     <h4>🔔 Rappels</h4>
@@ -247,12 +251,16 @@
         <button class="tab-btn" id="tabQuotes" data-tab="quotes">Devis</button>
         <button class="tab-btn" id="tabInvoices" data-tab="invoices">Factures</button>
         <button class="tab-btn" id="tabOrdersAll" data-tab="ordersAll">Commandes</button>
+        <button class="tab-btn" id="tabCarriers" data-tab="carriers">Transporteurs</button>
       </div>
       <div class="filter-row" id="orderFilterRow" style="display:none;">
         <select id="orderStatusFilter">
           <option value="">Tous les statuts</option>
           <option>Nouveau</option><option>En cours</option><option>Terminé</option><option>Annulé</option>
         </select>
+      </div>
+      <div class="filter-row" id="clientTagFilterRow" style="display:none;">
+        <select id="clientTagFilter"><option value="">Toutes les étiquettes</option></select>
       </div>
       <div class="search"><span>🔎</span><input id="searchInput" placeholder="Rechercher…"></div>
     </div>
@@ -303,6 +311,7 @@
         <div class="loc-status" id="locStatus"></div>
       </div>
     </div>
+    <div class="field"><label>Étiquettes (séparées par des virgules)</label><input id="cTags" placeholder="ex : VIP, Grossiste, Casablanca"></div>
     <div class="field"><label>Notes</label><textarea id="cNotes" placeholder="Informations complémentaires…"></textarea></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="cancelClientBtn">Annuler</button>
@@ -403,6 +412,41 @@
   </form>
 </div></div>
 
+<!-- Carrier modal -->
+<div class="overlay" id="carrierOverlay"><div class="modal">
+  <h3 id="carrierModalTitle">Nouveau transporteur</h3>
+  <form id="carrierForm">
+    <div class="field"><label>Nom du transporteur *</label><input id="trName" required placeholder="Ex : Amana, CTM, coursier local…"></div>
+    <div class="field-row">
+      <div class="field"><label>Personne à contacter</label><input id="trContact" placeholder="Nom du contact"></div>
+      <div class="field"><label>Téléphone</label><input id="trPhone" type="tel" placeholder="06 12 34 56 78"></div>
+    </div>
+    <div class="field"><label>Email</label><input id="trEmail" type="email" placeholder="contact@transporteur.com"></div>
+    <div class="field"><label>Notes</label><textarea id="trNotes" placeholder="Zones couvertes, tarifs, délais habituels…"></textarea></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="cancelCarrierBtn">Annuler</button>
+      <button type="submit" class="btn btn-primary" id="saveCarrierBtn">Enregistrer</button>
+    </div>
+  </form>
+</div></div>
+
+<!-- Shipping label modal -->
+<div class="overlay" id="etiquetteOverlay"><div class="modal">
+  <h3>Générer une étiquette d'envoi</h3>
+  <form id="etiquetteForm">
+    <div class="field"><label>Transporteur *</label><select id="eTransporteur" required></select></div>
+    <div class="field-row">
+      <div class="field"><label>N° de suivi</label><input id="eTracking" placeholder="Optionnel"></div>
+      <div class="field"><label>Nombre de colis</label><input id="eColis" type="number" step="1" min="1" value="1"></div>
+    </div>
+    <div class="field"><label>Poids total (kg)</label><input id="ePoids" type="number" step="0.1" placeholder="Optionnel"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="cancelEtiquetteBtn">Annuler</button>
+      <button type="submit" class="btn btn-primary" id="saveEtiquetteBtn">Générer</button>
+    </div>
+  </form>
+</div></div>
+
 <!-- Achat modal -->
 <div class="overlay" id="achatOverlay"><div class="modal">
   <h3>Nouvel achat</h3>
@@ -454,6 +498,14 @@
   </form>
 </div></div>
 
+<!-- Global search modal -->
+<div class="overlay" id="searchOverlay"><div class="modal" style="max-width:600px;">
+  <h3>Recherche globale</h3>
+  <div class="search" style="margin-bottom:14px;"><span>🔎</span><input id="globalSearchInput" placeholder="Client, produit, fournisseur, numéro de document…"></div>
+  <div id="globalSearchResults" style="max-height:60vh;overflow-y:auto;"></div>
+  <div class="modal-actions"><button type="button" class="btn btn-ghost btn-block" id="closeSearchBtn">Fermer</button></div>
+</div></div>
+
 <!-- Company settings modal -->
 <div class="overlay" id="companyOverlay"><div class="modal">
   <h3>Coordonnées de l'entreprise</h3>
@@ -483,6 +535,16 @@
     </div>
     <div class="field"><label>RIB</label><input id="stRib" placeholder="230 810 5004520221033200 56"></div>
     <div class="field"><label>Pied de page (mentions complémentaires)</label><textarea id="stFooter" placeholder="Ex : mentions légales additionnelles"></textarea></div>
+    <div class="field" style="border-top:1px solid var(--line);padding-top:14px;">
+      <label>🔔 Alertes quotidiennes par email (stock bas, factures en retard, rappels)</label>
+      <input id="stEmailAlertes" type="email" placeholder="email@destinataire.com" style="margin-bottom:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-primary btn-sm" id="activerAlertesBtn" data-mut="1">Activer</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="testerAlertesBtn" data-mut="1">Tester maintenant</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="desactiverAlertesBtn" data-mut="1">Désactiver</button>
+      </div>
+      <div class="hint" id="alertesStatus" style="margin-top:8px;"></div>
+    </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="cancelCompanyBtn">Annuler</button>
       <button type="submit" class="btn btn-primary" id="saveCompanyBtn">Enregistrer</button>
@@ -501,14 +563,14 @@
 
   var CFG = { url:"", key:"" };
   var appRole = "admin";
-  var clients=[], orders=[], products=[], suppliers=[], documents=[], achats=[], tarifs=[], rappels=[];
-  var currentId = { clients:null, products:null, suppliers:null, quotes:null, invoices:null };
+  var clients=[], orders=[], products=[], suppliers=[], documents=[], achats=[], tarifs=[], rappels=[], transporteurs=[], etiquettes=[];
+  var currentId = { clients:null, products:null, suppliers:null, quotes:null, invoices:null, carriers:null };
   var editingClientId=null, editingProductId=null, editingSupplierId=null;
   var activeTab = "clients";
   var invoiceSettings = { raisonSociale:'EZPAC', adresse:'Meryem 4 Z.I. Ain Atiq 12020 – Maroc', ice:'003254351000070', rc:'167169',
     ifiscal:'53685916', patente:'25910031', cnss:'5092893', telephone:'+212 6 16 16 35 36 / +212 8 08 58 64 26',
     email:'ezpacsarl@gmail.com', siteWeb:'ezpac.net', capitalSocial:'150.000,00 DH', rib:'230 810 5004520221033200 56',
-    tvaDefaut:20, piedPage:'' };
+    tvaDefaut:20, piedPage:'', emailAlertes:'', alertesActives:false };
   var openItemIds = {};
   var revChartInstance = null;
 
@@ -582,6 +644,7 @@
   function showSetup(){ $("setupScreen").style.display="block"; $("shell").style.display="none"; $("dashScreen").style.display="none"; $("setupUrl").value=CFG.url; $("setupKey").value=CFG.key; }
   function showApp(){ $("setupScreen").style.display="none"; $("dashScreen").style.display="none"; $("shell").style.display="grid"; }
   function showDash(){ $("setupScreen").style.display="none"; $("shell").style.display="none"; $("dashScreen").style.display="block"; renderDashboard(); }
+  $("backupBtn").addEventListener("click", sauvegardeComplete);
   function applyRoleUI(){
     document.body.classList.toggle("read-only", appRole==="lecture");
     $("roleTag").style.display = appRole==="lecture" ? "inline-block" : "none";
@@ -612,6 +675,8 @@
     $("stWeb").value=invoiceSettings.siteWeb||""; $("stCapital").value=invoiceSettings.capitalSocial||"";
     $("stRib").value=invoiceSettings.rib||"";
     $("stFooter").value=invoiceSettings.piedPage||"";
+    $("stEmailAlertes").value=invoiceSettings.emailAlertes||"";
+    $("alertesStatus").textContent = invoiceSettings.alertesActives ? "✅ Alertes actives — envoyées chaque matin à 8h." : "Alertes désactivées.";
     $("companyOverlay").classList.add("open");
   });
   $("cancelCompanyBtn").addEventListener("click", function(){ $("companyOverlay").classList.remove("open"); });
@@ -623,12 +688,37 @@
       rc:$("stRc").value.trim(), ifiscal:$("stIf").value.trim(), patente:$("stPatente").value.trim(), cnss:$("stCnss").value.trim(),
       tvaDefaut: $("stTva").value?Number($("stTva").value):20, telephone:$("stPhone").value.trim(), email:$("stEmail").value.trim(),
       siteWeb:$("stWeb").value.trim(), capitalSocial:$("stCapital").value.trim(), rib:$("stRib").value.trim(),
-      piedPage:$("stFooter").value.trim() };
+      piedPage:$("stFooter").value.trim(), emailAlertes:$("stEmailAlertes").value.trim(), alertesActives:invoiceSettings.alertesActives };
     var btn=$("saveCompanyBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
     api({action:"saveSettings", settings:s}).then(function(){
       invoiceSettings=s; $("companyOverlay").classList.remove("open"); toast("Coordonnées enregistrées");
     }).catch(function(err){ toast("Échec : "+err.message); })
       .then(function(){ btn.disabled=false; btn.textContent="Enregistrer"; });
+  });
+
+  $("activerAlertesBtn").addEventListener("click", function(){
+    if(!$("stEmailAlertes").value.trim()){ toast("Indiquez d'abord un email destinataire"); return; }
+    var btn=this; btn.disabled=true;
+    api({action:"saveSettings", settings:Object.assign({}, invoiceSettings, {emailAlertes:$("stEmailAlertes").value.trim()})}).then(function(){
+      return api({action:"installerAlerteQuotidienne"});
+    }).then(function(){
+      invoiceSettings.emailAlertes=$("stEmailAlertes").value.trim(); invoiceSettings.alertesActives=true;
+      $("alertesStatus").textContent="✅ Alertes actives — envoyées chaque matin à 8h."; toast("Alertes quotidiennes activées");
+    }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
+  });
+  $("desactiverAlertesBtn").addEventListener("click", function(){
+    var btn=this; btn.disabled=true;
+    api({action:"supprimerAlerteQuotidienne"}).then(function(){
+      invoiceSettings.alertesActives=false; $("alertesStatus").textContent="Alertes désactivées."; toast("Alertes désactivées");
+    }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
+  });
+  $("testerAlertesBtn").addEventListener("click", function(){
+    if(!$("stEmailAlertes").value.trim()){ toast("Indiquez d'abord un email destinataire"); return; }
+    var btn=this; btn.disabled=true; btn.textContent="Envoi…";
+    api({action:"saveSettings", settings:Object.assign({}, invoiceSettings, {emailAlertes:$("stEmailAlertes").value.trim()})}).then(function(){
+      return api({action:"testerAlerteQuotidienne"});
+    }).then(function(){ toast("Email de test envoyé (s'il y a quelque chose à signaler)"); })
+      .catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; btn.textContent="Tester maintenant"; });
   });
 
   // ---------- Data ----------
@@ -638,12 +728,18 @@
     return api({action:"load"}).then(function(res){
       clients=res.clients||[]; orders=res.orders||[]; products=res.products||[];
       suppliers=res.suppliers||[]; documents=res.documents||[]; achats=res.achats||[];
-      tarifs=res.tarifs||[]; rappels=res.rappels||[];
+      tarifs=res.tarifs||[]; rappels=res.rappels||[]; transporteurs=res.transporteurs||[]; etiquettes=res.etiquettes||[];
       if(res.settings) invoiceSettings=res.settings;
       clients.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
       products.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
       suppliers.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
+      transporteurs.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
       documents.sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""));});
+      var tagsDistinctes = [];
+      clients.forEach(function(c){ (c.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean).forEach(function(t){ if(tagsDistinctes.indexOf(t)===-1) tagsDistinctes.push(t); }); });
+      tagsDistinctes.sort();
+      var curTag = $("clientTagFilter").value;
+      $("clientTagFilter").innerHTML = '<option value="">Toutes les étiquettes</option>' + tagsDistinctes.map(function(t){ return '<option'+(t===curTag?' selected':'')+'>'+esc(t)+'</option>'; }).join("");
       renderList(); renderDetail();
       if($("dashScreen").style.display!=="none") renderDashboard();
       $("refreshBtn").textContent="↻";
@@ -684,18 +780,20 @@
     else if(activeTab==="suppliers") renderSupplierList();
     else if(activeTab==="quotes") renderQuoteList();
     else if(activeTab==="ordersAll") renderOrdersAllList();
+    else if(activeTab==="carriers") renderCarrierList();
     else renderInvoiceList();
   }
-  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"", ordersAll:"" };
+  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"", ordersAll:"", carriers:"+ Nouveau transporteur" };
   function setTab(tab){
     activeTab=tab;
-    ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll"].forEach(function(t){
+    ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll","Carriers"].forEach(function(t){
       $("tab"+t).classList.toggle("active", t.toLowerCase()===tab.toLowerCase());
     });
     $("searchInput").placeholder="Rechercher…";
     $("newBtn").style.display = newBtnLabels[tab] ? "block" : "none";
     $("newBtn").textContent = newBtnLabels[tab];
     $("orderFilterRow").style.display = tab==="ordersAll" ? "flex" : "none";
+    $("clientTagFilterRow").style.display = tab==="clients" ? "flex" : "none";
     renderList(); renderDetail();
   }
   $("tabClients").addEventListener("click",function(){ setTab("clients"); });
@@ -704,13 +802,16 @@
   $("tabQuotes").addEventListener("click",function(){ setTab("quotes"); });
   $("tabInvoices").addEventListener("click",function(){ setTab("invoices"); });
   $("tabOrdersAll").addEventListener("click",function(){ setTab("ordersAll"); });
+  $("tabCarriers").addEventListener("click",function(){ setTab("carriers"); });
   $("newBtn").addEventListener("click", function(){
     if(activeTab==="clients") openClientModal(null);
     else if(activeTab==="products") openProductModal(null);
     else if(activeTab==="suppliers") openSupplierModal(null);
+    else if(activeTab==="carriers") openCarrierModal(null);
   });
   $("searchInput").addEventListener("input", renderList);
   $("orderStatusFilter").addEventListener("change", renderList);
+  $("clientTagFilter").addEventListener("change", renderList);
   $("refreshBtn").addEventListener("click", refresh);
   $("backBtn").addEventListener("click", function(){ $("shell").setAttribute("data-mobile-view","list"); });
 
@@ -753,17 +854,20 @@
   // ===================== CLIENTS =====================
   function renderClientList(){
     var q=($("searchInput").value||"").toLowerCase().trim();
+    var tagFiltre=$("clientTagFilter").value;
     var list=clients.filter(function(c){
+      if(tagFiltre && (c.tags||"").split(",").map(function(t){return t.trim();}).indexOf(tagFiltre)===-1) return false;
       if(!q) return true;
-      return [c.name,c.phone,c.email,c.address,c.iceNumber,c.contactPerson].some(function(v){return v && String(v).toLowerCase().indexOf(q)!==-1;});
+      return [c.name,c.phone,c.email,c.address,c.iceNumber,c.contactPerson,c.tags].some(function(v){return v && String(v).toLowerCase().indexOf(q)!==-1;});
     });
     var el=$("listScroll");
     if(!list.length){ el.innerHTML='<div class="empty-hint">'+(clients.length?"Aucun client ne correspond.":"Aucun client pour l'instant.<br>Ajoutez votre premier client.")+'</div>'; return; }
     el.innerHTML=list.map(function(c){
+      var tagsHtml = (c.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean).map(function(t){return '<span class="pill pill-navy" style="padding:1px 7px;font-size:10px;">'+esc(t)+'</span>';}).join(" ");
       return '<div class="row-card'+(c.id===currentId.clients?" active":"")+'" data-id="'+esc(c.id)+'">'
         +'<div class="name">'+esc(c.name)+'</div><div class="meta">'
         +(c.contactPerson?'<span>👤 '+esc(c.contactPerson)+'</span>':'')+(c.phone?'<span>📞 '+esc(c.phone)+'</span>':'')+'</div>'
-        +(c.iceNumber?'<div class="sub">ICE '+esc(c.iceNumber)+'</div>':'')+'</div>';
+        +(c.iceNumber?'<div class="sub">ICE '+esc(c.iceNumber)+'</div>':'')+(tagsHtml?'<div style="margin-top:4px;">'+tagsHtml+'</div>':'')+'</div>';
     }).join("");
     Array.prototype.forEach.call(el.querySelectorAll(".row-card"),function(card){
       card.addEventListener("click",function(){ openRow("clients", card.getAttribute("data-id")); });
@@ -788,6 +892,7 @@
     h+='<div class="info-item"><div class="lbl">Email</div><div class="val">'+(c.email?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Adresse</div><div class="val">'+(c.address?esc(c.address):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Localisation GPS</div><div class="val">'+(mapLink||'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Étiquettes</div><div class="val">'+((c.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean).map(function(t){return '<span class="pill pill-navy" style="padding:2px 8px;margin-right:4px;">'+esc(t)+'</span>';}).join("")||'—')+'</div></div>';
     h+='</div>';
     if(c.notes) h+='<div class="notes-block">'+esc(c.notes)+'</div>';
 
@@ -897,6 +1002,7 @@
         +'<button type="button" class="btn btn-ghost btn-sm" data-pdf-doc="'+esc(doc.id)+'" style="padding:3px 8px;">⬇</button>'
         +'<button type="button" class="btn btn-ghost btn-sm" data-edit-doc="'+esc(doc.id)+'" style="padding:3px 8px;" data-mut="1">✎</button>'
         +'<button type="button" class="btn btn-ghost btn-sm" data-xls-doc="'+esc(doc.id)+'" style="padding:3px 8px;">📊</button>'
+        +(doc.type==="BL"?'<button type="button" class="btn btn-ghost btn-sm" data-etq-order="'+esc(o.id)+'" data-mut="1" style="padding:3px 8px;">🏷️</button>':'')
         +'<button type="button" class="btn btn-ghost btn-sm" data-wa-doc="'+esc(doc.id)+'" style="padding:3px 8px;color:var(--success);">💬</button></div>';
     });
     h+='<div class="item-row" style="margin-top:8px;">';
@@ -932,6 +1038,9 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-gen][data-order="'+o.id+'"]'), function(btn){
       btn.addEventListener("click", function(e){ e.stopPropagation(); genererDocumentPourCommande(btn.getAttribute("data-gen"), o.id, btn); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-etq-order="'+o.id+'"]'), function(btn){
+      btn.addEventListener("click", function(e){ e.stopPropagation(); openEtiquetteModal(o.id); });
     });
   }
 
@@ -970,6 +1079,7 @@
     $("cContact").value=ex?(ex.contactPerson||""):""; $("cPhone").value=ex?(ex.phone||""):"";
     $("cEmail").value=ex?(ex.email||""):""; $("cAddress").value=ex?(ex.address||""):"";
     $("cNotes").value=ex?(ex.notes||""):""; $("cLocInput").value="";
+    $("cTags").value=ex?(ex.tags||""):"";
     pendingLoc.lat=(ex&&ex.lat!=null&&ex.lat!=="")?Number(ex.lat):null;
     pendingLoc.lng=(ex&&ex.lng!=null&&ex.lng!=="")?Number(ex.lng):null;
     setLocStatus(pendingLoc.lat!=null?("Position enregistrée ("+pendingLoc.lat.toFixed(4)+", "+pendingLoc.lng.toFixed(4)+")"):"", pendingLoc.lat!=null?"ok":"");
@@ -1038,7 +1148,7 @@
     if(!name){ toast("Le nom est obligatoire"); return; }
     var c={ id:editingClientId||"", name:name, iceNumber:$("cIce").value.trim(), contactPerson:$("cContact").value.trim(),
       phone:normalizePhone($("cPhone").value.trim()), email:$("cEmail").value.trim(), address:$("cAddress").value.trim(),
-      notes:$("cNotes").value.trim(), lat:pendingLoc.lat, lng:pendingLoc.lng };
+      notes:$("cNotes").value.trim(), tags:$("cTags").value.trim(), lat:pendingLoc.lat, lng:pendingLoc.lng };
     var btn=$("saveClientBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
     api({action:"saveClient",client:c}).then(function(res){
       closeClientModal(); toast(editingClientId?"Client mis à jour":"Client créé");
@@ -1308,19 +1418,27 @@
     el.innerHTML=list.map(function(p){
       var prix=(p.unitPrice!=null&&p.unitPrice!=="")?(nf(p.unitPrice)+" "+(p.currency||"MAD")+" / "+(p.unit||"pièce")):"";
       var basStock = p.stock!=null && p.seuilAlerte!=null && Number(p.stock)<=Number(p.seuilAlerte);
-      return '<div class="row-card'+(p.id===currentId.products?" active":"")+'" data-id="'+esc(p.id)+'">'
+      return '<div class="row-card'+(p.id===currentId.products?" active":"")+'" data-id="'+esc(p.id)+'" style="position:relative;">'
+        +'<button type="button" class="icon-btn" data-dup="'+esc(p.id)+'" data-mut="1" title="Dupliquer" style="position:absolute;top:6px;right:6px;font-size:13px;padding:4px;">📋</button>'
         +'<div class="name">'+esc(p.name)+'</div><div class="meta">'
         +(p.dimensions?'<span>📐 '+esc(p.dimensions)+'</span>':'')+(p.grammage?'<span>'+esc(p.grammage)+'</span>':'')
         +(p.stock!=null?'<span'+(basStock?' class="stock-warn"':'')+'>'+(basStock?'⚠ ':'')+'Stock : '+p.stock+'</span>':'')+'</div>'
         +(prix?'<div class="price">'+prix+'</div>':'')+'</div>';
     }).join("");
     Array.prototype.forEach.call(el.querySelectorAll(".row-card"),function(card){ card.addEventListener("click",function(){ openRow("products", card.getAttribute("data-id")); }); });
+    Array.prototype.forEach.call(el.querySelectorAll("[data-dup]"),function(btn){
+      btn.addEventListener("click",function(e){
+        e.stopPropagation();
+        var p=products.find(function(x){return String(x.id)===String(btn.getAttribute("data-dup"));});
+        if(p) openProductModal(p, true);
+      });
+    });
   }
   function renderProductDetail(p){
     var basStock = p.stock!=null && p.seuilAlerte!=null && Number(p.stock)<=Number(p.seuilAlerte);
     var h='<div class="detail-inner">';
     h+='<div class="head-block"><div><h2>'+esc(p.name)+'</h2><div class="sub">Ajouté le '+fmtDate(p.createdAt)+'</div></div>';
-    h+='<div class="head-actions"><button class="icon-btn" id="editProductBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="deleteProductBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
+    h+='<div class="head-actions"><button class="icon-btn" id="editProductBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="duplicateProductBtn" title="Dupliquer pour créer un nouveau produit" data-mut="1">📋</button><button class="icon-btn" id="deleteProductBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
     if(basStock) h+='<div class="notes-block" style="border-color:var(--danger);color:var(--danger);font-weight:600;">⚠ Stock bas : '+p.stock+' restant(s) (seuil : '+p.seuilAlerte+')</div>';
     h+='<div class="info-grid">';
     h+='<div class="info-item"><div class="lbl">Dimensions</div><div class="val">'+(p.dimensions?esc(p.dimensions):'—')+'</div></div>';
@@ -1335,20 +1453,23 @@
     h+='</div>';
     $("colDetail").innerHTML=h;
     $("editProductBtn").addEventListener("click",function(){ openProductModal(p); });
+    $("duplicateProductBtn").addEventListener("click",function(){ openProductModal(p, true); });
     $("deleteProductBtn").addEventListener("click",function(){ deleteProduct(p); });
   }
-  function openProductModal(ex){
-    editingProductId=ex?ex.id:null;
-    $("productModalTitle").textContent=ex?"Modifier le produit":"Nouveau produit";
-    $("pName").value=ex?(ex.name||""):""; $("pDimensions").value=ex?(ex.dimensions||""):"";
+  function openProductModal(ex, dupliquer){
+    editingProductId=(ex && !dupliquer)?ex.id:null;
+    $("productModalTitle").textContent = dupliquer ? "Nouveau produit (à partir de « "+ex.name+" »)" : (ex?"Modifier le produit":"Nouveau produit");
+    $("pName").value=ex?(dupliquer?(ex.name||"")+" (copie)":(ex.name||"")):"";
+    $("pDimensions").value=ex?(ex.dimensions||""):"";
     $("pGrammage").value=ex?(ex.grammage||""):""; $("pColor").value=ex?(ex.color||""):"";
     $("pUnit").value=ex?(ex.unit||"pièce"):"pièce"; $("pUnitPrice").value=(ex&&ex.unitPrice!=null&&ex.unitPrice!=="")?ex.unitPrice:"";
-    $("pCurrency").value=ex?(ex.currency||"MAD"):"MAD"; $("pStock").value=(ex&&ex.stock!=null&&ex.stock!=="")?ex.stock:"";
+    $("pCurrency").value=ex?(ex.currency||"MAD"):"MAD";
+    $("pStock").value=(!dupliquer && ex&&ex.stock!=null&&ex.stock!=="")?ex.stock:"";
     $("pSeuil").value=(ex&&ex.seuilAlerte!=null&&ex.seuilAlerte!=="")?ex.seuilAlerte:""; $("pNotes").value=ex?(ex.notes||""):"";
     var sel=$("pFournisseur"); sel.innerHTML='<option value="">— Aucun —</option>'+suppliers.map(function(f){return '<option value="'+esc(f.id)+'">'+esc(f.name)+'</option>';}).join("");
     sel.value = ex && ex.fournisseurId ? ex.fournisseurId : "";
     $("productOverlay").classList.add("open");
-    setTimeout(function(){ $("pName").focus(); },50);
+    setTimeout(function(){ $("pName").focus(); if(dupliquer) $("pName").select(); },50);
   }
   $("cancelProductBtn").addEventListener("click", function(){ $("productOverlay").classList.remove("open"); editingProductId=null; });
   $("productOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
@@ -1465,6 +1586,124 @@
       .catch(function(e){ toast("Échec : "+e.message); });
   }
 
+  // ===================== TRANSPORTEURS =====================
+  var editingCarrierId=null;
+  function renderCarrierList(){
+    var q=($("searchInput").value||"").toLowerCase().trim();
+    var list=transporteurs.filter(function(t){ if(!q) return true; return [t.name,t.phone,t.email,t.contactPerson].some(function(v){return v&&String(v).toLowerCase().indexOf(q)!==-1;}); });
+    var el=$("listScroll");
+    if(!list.length){ el.innerHTML='<div class="empty-hint">'+(transporteurs.length?"Aucun transporteur ne correspond.":"Aucun transporteur pour l'instant.")+'</div>'; return; }
+    el.innerHTML=list.map(function(t){
+      return '<div class="row-card'+(t.id===currentId.carriers?" active":"")+'" data-id="'+esc(t.id)+'">'
+        +'<div class="name">'+esc(t.name)+'</div><div class="meta">'
+        +(t.contactPerson?'<span>👤 '+esc(t.contactPerson)+'</span>':'')+(t.phone?'<span>📞 '+esc(t.phone)+'</span>':'')+'</div></div>';
+    }).join("");
+    Array.prototype.forEach.call(el.querySelectorAll(".row-card"),function(card){ card.addEventListener("click",function(){ openRow("carriers", card.getAttribute("data-id")); }); });
+  }
+  function renderCarrierDetail(t){
+    var etqLiees = etiquettes.filter(function(e){ return String(e.transporteurId)===String(t.id); }).sort(function(a,b){return String(b.createdAt).localeCompare(String(a.createdAt));});
+    var h='<div class="detail-inner">';
+    h+='<div class="head-block"><div><h2>'+esc(t.name)+'</h2><div class="sub">Ajouté le '+fmtDate(t.createdAt)+'</div></div>';
+    h+='<div class="head-actions"><button class="icon-btn" id="editCarrierBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="deleteCarrierBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
+    h+='<div class="info-grid">';
+    h+='<div class="info-item"><div class="lbl">Personne à contacter</div><div class="val">'+(t.contactPerson?esc(t.contactPerson):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Téléphone</div><div class="val">'+(t.phone?'<a href="tel:'+esc(t.phone)+'">'+esc(t.phone)+'</a>':'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Email</div><div class="val">'+(t.email?'<a href="mailto:'+esc(t.email)+'">'+esc(t.email)+'</a>':'—')+'</div></div>';
+    h+='</div>';
+    if(t.notes) h+='<div class="notes-block">'+esc(t.notes)+'</div>';
+    h+='<div class="section-head"><h3>Étiquettes générées ('+etqLiees.length+')</h3></div>';
+    if(!etqLiees.length) h+='<div class="empty-hint">Aucune étiquette générée avec ce transporteur.</div>';
+    else etqLiees.forEach(function(e){
+      h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(e.clientName)+'</div>'
+        +'<div class="item-sub">'+fmtDate(e.createdAt)+(e.trackingNumber?' · Suivi : '+esc(e.trackingNumber):'')+' · '+e.colis+' colis</div></div>'
+        +'<button type="button" class="btn btn-ghost btn-sm" data-print-etq="'+esc(e.id)+'">🖨</button></div></div>';
+    });
+    h+='</div>';
+    $("colDetail").innerHTML=h;
+    $("editCarrierBtn").addEventListener("click",function(){ openCarrierModal(t); });
+    $("deleteCarrierBtn").addEventListener("click",function(){ deleteCarrier(t); });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-print-etq]'), function(btn){
+      var eid=btn.getAttribute("data-print-etq"); var etq=etiquettes.find(function(x){return String(x.id)===String(eid);});
+      if(etq) btn.addEventListener("click",function(){ imprimerEtiquette(etq); });
+    });
+  }
+  function openCarrierModal(ex){
+    editingCarrierId=ex?ex.id:null;
+    $("carrierModalTitle").textContent=ex?"Modifier le transporteur":"Nouveau transporteur";
+    $("trName").value=ex?(ex.name||""):""; $("trContact").value=ex?(ex.contactPerson||""):"";
+    $("trPhone").value=ex?(ex.phone||""):""; $("trEmail").value=ex?(ex.email||""):""; $("trNotes").value=ex?(ex.notes||""):"";
+    $("carrierOverlay").classList.add("open");
+    setTimeout(function(){ $("trName").focus(); },50);
+  }
+  $("cancelCarrierBtn").addEventListener("click", function(){ $("carrierOverlay").classList.remove("open"); editingCarrierId=null; });
+  $("carrierOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
+  $("trPhone").addEventListener("blur",function(){ this.value=normalizePhone(this.value); });
+  $("carrierForm").addEventListener("submit",function(e){
+    e.preventDefault();
+    var name=$("trName").value.trim(); if(!name){ toast("Le nom est obligatoire"); return; }
+    var t={ id:editingCarrierId||"", name:name, contactPerson:$("trContact").value.trim(), phone:normalizePhone($("trPhone").value.trim()), email:$("trEmail").value.trim(), notes:$("trNotes").value.trim() };
+    var btn=$("saveCarrierBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
+    api({action:"saveTransporteur", transporteur:t}).then(function(res){
+      $("carrierOverlay").classList.remove("open"); toast(editingCarrierId?"Transporteur mis à jour":"Transporteur créé");
+      var nid=res.id; return refresh().then(function(){ if(nid) openRow("carriers", nid); });
+    }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; btn.textContent="Enregistrer"; });
+  });
+  function deleteCarrier(t){
+    if(!confirm('Supprimer le transporteur "'+t.name+'" ?')) return;
+    api({action:"deleteTransporteur", id:t.id}).then(function(){ currentId.carriers=null; $("shell").setAttribute("data-mobile-view","list"); toast("Transporteur supprimé"); refresh(); })
+      .catch(function(e){ toast("Échec : "+e.message); });
+  }
+
+  // ===================== ÉTIQUETTES D'ENVOI =====================
+  var etiquetteOrderId=null;
+  function openEtiquetteModal(orderId){
+    etiquetteOrderId=orderId;
+    var sel=$("eTransporteur");
+    if(!transporteurs.length){ toast("Ajoutez d'abord un transporteur dans l'onglet Transporteurs"); return; }
+    sel.innerHTML = transporteurs.map(function(t){ return '<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>'; }).join("");
+    $("eTracking").value=""; $("eColis").value="1"; $("ePoids").value="";
+    $("etiquetteOverlay").classList.add("open");
+  }
+  $("cancelEtiquetteBtn").addEventListener("click", function(){ $("etiquetteOverlay").classList.remove("open"); });
+  $("etiquetteOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
+  $("etiquetteForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var btn=$("saveEtiquetteBtn"); btn.disabled=true; btn.textContent="Génération…";
+    api({action:"genererEtiquette", orderId:etiquetteOrderId, transporteurId:$("eTransporteur").value,
+      trackingNumber:$("eTracking").value.trim(), colis:Number($("eColis").value)||1, poids:$("ePoids").value.trim()})
+      .then(function(res){
+        $("etiquetteOverlay").classList.remove("open"); toast("Étiquette générée");
+        return refresh().then(function(){ imprimerEtiquette(res.etiquette); });
+      }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; btn.textContent="Générer"; });
+  });
+  function imprimerEtiquette(e){
+    var s=invoiceSettings;
+    var html='<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Étiquette — '+esc(e.clientName)+'</title><style>'
+      +'@page{ size:100mm 150mm; margin:0; }'
+      +'body{font-family:Arial,sans-serif;color:#111;margin:0;padding:14mm 10mm;width:100mm;height:150mm;box-sizing:border-box;}'
+      +'.from{font-size:10px;color:#555;border-bottom:1px solid #999;padding-bottom:8px;margin-bottom:14px;}'
+      +'.carrier{font-size:16px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:14px;}'
+      +'.to-label{font-size:9px;color:#777;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}'
+      +'.to-name{font-size:20px;font-weight:800;margin-bottom:6px;}'
+      +'.to-details{font-size:13px;line-height:1.5;margin-bottom:20px;}'
+      +'.meta{display:flex;justify-content:space-between;border-top:2px solid #111;padding-top:10px;font-size:12px;}'
+      +'.meta div{text-align:center;} .meta strong{display:block;font-size:16px;}'
+      +'.tracking{margin-top:16px;text-align:center;font-size:13px;letter-spacing:.1em;border:1px dashed #999;padding:8px;}'
+      +'</style></head><body>'
+      +'<div class="from"><strong>'+esc(s.raisonSociale||'')+'</strong><br>'+esc(s.adresse||'')+'<br>'+(s.telephone?'Tél : '+esc(s.telephone):'')+'</div>'
+      +'<div class="carrier">🚚 '+esc(e.transporteurName||'')+'</div>'
+      +'<div class="to-label">Destinataire</div>'
+      +'<div class="to-name">'+esc(e.clientName||'')+'</div>'
+      +'<div class="to-details">'+(e.clientAddress?esc(e.clientAddress)+'<br>':'')+(e.clientPhone?'Tél : '+esc(e.clientPhone):'')+'</div>'
+      +'<div class="meta"><div>Colis<strong>'+esc(e.colis||1)+'</strong></div>'+(e.poids?'<div>Poids<strong>'+esc(e.poids)+' kg</strong></div>':'')+'<div>Date<strong>'+fmtDate(e.createdAt).split(' · ')[0]+'</strong></div></div>'
+      +(e.trackingNumber?'<div class="tracking">N° DE SUIVI<br><strong>'+esc(e.trackingNumber)+'</strong></div>':'')
+      +'</body></html>';
+    var w=window.open("","_blank");
+    if(!w){ toast("Autorisez les fenêtres pop-up pour imprimer."); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+    setTimeout(function(){ w.focus(); w.print(); },300);
+  }
+
   // ---------- Achats ----------
   var achatFournisseurId=null, achatLines=[];
   function openAchatModal(fournisseurId){
@@ -1544,6 +1783,11 @@
       renderQuoteDetail(d);
     } else if(activeTab==="ordersAll"){
       $("colDetail").innerHTML='<div class="placeholder">Cliquez sur une commande<br>pour l\'ouvrir chez son client.</div>';
+    } else if(activeTab==="carriers"){
+      if(!currentId.carriers){ $("colDetail").innerHTML='<div class="placeholder">Sélectionnez un transporteur<br>ou créez-en un nouveau.</div>'; return; }
+      var tr=transporteurs.find(function(x){return String(x.id)===String(currentId.carriers);});
+      if(!tr){ $("colDetail").innerHTML='<div class="placeholder">Transporteur introuvable.</div>'; return; }
+      renderCarrierDetail(tr);
     } else {
       if(!currentId.invoices){ $("colDetail").innerHTML='<div class="placeholder">Sélectionnez une facture<br>dans la liste.</div>'; return; }
       var inv=documents.find(function(x){return String(x.id)===String(currentId.invoices);});
@@ -1857,6 +2101,65 @@
         api({action:"deleteRappel", id:btn.getAttribute("data-del-rap")}).then(function(){ toast("Rappel supprimé"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
       });
     });
+  }
+
+  // ===================== RECHERCHE GLOBALE =====================
+  $("globalSearchBtn").addEventListener("click", function(){
+    $("globalSearchInput").value=""; $("globalSearchResults").innerHTML='<div class="empty-hint">Tapez pour rechercher…</div>';
+    $("searchOverlay").classList.add("open");
+    setTimeout(function(){ $("globalSearchInput").focus(); },50);
+  });
+  $("closeSearchBtn").addEventListener("click", function(){ $("searchOverlay").classList.remove("open"); });
+  $("searchOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
+  $("globalSearchInput").addEventListener("input", function(){
+    var q=this.value.toLowerCase().trim();
+    var el=$("globalSearchResults");
+    if(!q || q.length<2){ el.innerHTML='<div class="empty-hint">Tapez au moins 2 caractères…</div>'; return; }
+    var res=[];
+    clients.forEach(function(c){ if([c.name,c.phone,c.email,c.iceNumber,c.tags].some(function(v){return v&&String(v).toLowerCase().indexOf(q)!==-1;}))
+      res.push({kind:"Client", label:c.name, sub:c.phone||c.email||"", go:function(){ setTab("clients"); openRow("clients", c.id); }}); });
+    products.forEach(function(p){ if([p.name,p.dimensions,p.color].some(function(v){return v&&String(v).toLowerCase().indexOf(q)!==-1;}))
+      res.push({kind:"Produit", label:p.name, sub:p.dimensions||"", go:function(){ setTab("products"); openRow("products", p.id); }}); });
+    suppliers.forEach(function(f){ if([f.name,f.phone,f.email].some(function(v){return v&&String(v).toLowerCase().indexOf(q)!==-1;}))
+      res.push({kind:"Fournisseur", label:f.name, sub:f.phone||"", go:function(){ setTab("suppliers"); openRow("suppliers", f.id); }}); });
+    transporteurs.forEach(function(t){ if([t.name,t.phone].some(function(v){return v&&String(v).toLowerCase().indexOf(q)!==-1;}))
+      res.push({kind:"Transporteur", label:t.name, sub:t.phone||"", go:function(){ setTab("carriers"); openRow("carriers", t.id); }}); });
+    documents.forEach(function(d){ if([d.numero,d.clientName].some(function(v){return v&&String(v).toLowerCase().indexOf(q)!==-1;}))
+      res.push({kind:d.type, label:d.numero, sub:d.clientName||"", go:function(){
+        if(d.type==="DEVIS"){ setTab("quotes"); openRow("quotes", d.id); } else { setTab("invoices"); openRow("invoices", d.id); }
+      }}); });
+    orders.forEach(function(o){ if((o.title||"").toLowerCase().indexOf(q)!==-1)
+      res.push({kind:"Commande", label:o.title, sub:(clients.find(function(c){return String(c.id)===String(o.clientId);})||{}).name||"", go:function(){ goToOrder(o); }}); });
+    if(!res.length){ el.innerHTML='<div class="empty-hint">Aucun résultat.</div>'; return; }
+    el.innerHTML = res.slice(0,40).map(function(r,idx){
+      return '<div class="row-card" data-idx="'+idx+'"><div class="name">'+esc(r.label)+' <span class="pill pill-navy" style="padding:1px 7px;font-size:10px;">'+esc(r.kind)+'</span></div>'
+        +(r.sub?'<div class="meta"><span>'+esc(r.sub)+'</span></div>':'')+'</div>';
+    }).join("");
+    Array.prototype.forEach.call(el.querySelectorAll(".row-card"), function(card){
+      card.addEventListener("click", function(){ $("searchOverlay").classList.remove("open"); res[Number(card.getAttribute("data-idx"))].go(); });
+    });
+  });
+
+  // ===================== SAUVEGARDE COMPLÈTE =====================
+  function sauvegardeComplete(){
+    var feuilles = {};
+    feuilles["Clients"] = [["Nom","ICE","Contact","Téléphone","Email","Adresse","Étiquettes"]]
+      .concat(clients.map(function(c){ return [c.name,c.iceNumber,c.contactPerson,c.phone,c.email,c.address,c.tags]; }));
+    feuilles["Commandes"] = [["Client","Titre","Montant","Devise","Statut","Date"]]
+      .concat(orders.map(function(o){ var c=clients.find(function(x){return String(x.id)===String(o.clientId);}); return [c?c.name:"",o.title,totalCommande(o),o.currency,o.status,fmtDate(o.createdAt)]; }));
+    feuilles["Produits"] = [["Nom","Dimensions","Grammage","Couleur","Prix","Devise","Stock","Fournisseur"]]
+      .concat(products.map(function(p){ return [p.name,p.dimensions,p.grammage,p.color,p.unitPrice,p.currency,p.stock,p.fournisseurName]; }));
+    feuilles["Fournisseurs"] = [["Nom","Contact","Téléphone","Email"]]
+      .concat(suppliers.map(function(f){ return [f.name,f.contactPerson,f.phone,f.email]; }));
+    feuilles["Achats"] = [["Fournisseur","Titre","Montant","Statut","Paiement","Date"]]
+      .concat(achats.map(function(a){ var f=suppliers.find(function(x){return String(x.id)===String(a.fournisseurId);}); return [f?f.name:"",a.title,totalAchat(a),a.status,a.statutPaiement,fmtDate(a.createdAt)]; }));
+    feuilles["Devis"] = [["Numéro","Client","Total TTC","Statut","Date"]]
+      .concat(documents.filter(function(d){return d.type==="DEVIS";}).map(function(d){ return [d.numero,d.clientName,d.totalTTC,d.statutDevis,fmtDate(d.date)]; }));
+    feuilles["Factures"] = [["Numéro","Client","Total TTC","Statut","Date"]]
+      .concat(documents.filter(function(d){return d.type==="FACTURE"||d.type==="AVOIR";}).map(function(d){ return [d.numero,d.clientName,d.totalTTC,d.type==="AVOIR"?"Avoir":d.statutPaiement,fmtDate(d.date)]; }));
+    feuilles["Tarifs négociés"] = [["Client","Produit","Prix"]]
+      .concat(tarifs.map(function(t){ return [(clients.find(function(c){return String(c.id)===String(t.clientId);})||{}).name||"", t.productName, t.unitPrice]; }));
+    exportExcelFile("sauvegarde-complete-"+new Date().toISOString().slice(0,10)+".xlsx", feuilles);
   }
 
   // ===================== TABLEAU DE BORD =====================
