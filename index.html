@@ -138,6 +138,9 @@
   .line-row .total-cell{font-size:12.5px;font-weight:700;text-align:right;padding-right:4px;}
   .line-row .rm-btn{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:2px 6px;}
   .lines-total{display:flex;justify-content:flex-end;gap:14px;font-size:13px;padding-top:8px;border-top:1px solid var(--line);margin-top:4px;font-weight:700;}
+  .tier-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center;margin-bottom:6px;}
+  .tier-row input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px;background:var(--paper-raised);color:var(--ink);width:100%;}
+  .tier-row .rm-btn{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:2px 6px;}
 
   .overlay{position:fixed;inset:0;background:rgba(15,18,22,.5);display:none;align-items:flex-end;justify-content:center;z-index:50;}
   .overlay.open{display:flex;}
@@ -265,7 +268,11 @@
       <div class="search"><span>🔎</span><input id="searchInput" placeholder="Rechercher…"></div>
     </div>
     <div class="list-scroll" id="listScroll"></div>
-    <div class="fab-wrap"><button class="btn btn-primary btn-block" id="newBtn" data-mut="1">+ Nouveau</button></div>
+    <div class="fab-wrap">
+      <button class="btn btn-primary btn-block" id="newBtn" data-mut="1">+ Nouveau</button>
+      <input type="file" id="importExcelInput" accept=".xlsx,.xls,.csv" style="display:none;">
+      <button class="btn btn-ghost btn-block" id="importExcelBtn" data-mut="1" style="display:none;margin-top:8px;">📥 Importer depuis Excel</button>
+    </div>
   </div>
   <div class="col-detail" id="colDetail">
     <div class="placeholder">Sélectionnez un élément<br>ou créez-en un nouveau.</div>
@@ -382,6 +389,12 @@
       <div class="field"><label>Seuil d'alerte</label><input id="pSeuil" type="number" step="1" placeholder="ex : 50"></div>
     </div>
     <div class="field"><label>Fournisseur</label><select id="pFournisseur"><option value="">— Aucun —</option></select></div>
+    <div class="field">
+      <label>Paliers de prix selon quantité (optionnel)</label>
+      <div id="pTiersEditor"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="pAddTier">+ Ajouter un palier</button>
+      <div class="hint" style="margin-top:6px;">Ex : à partir de 500 pièces → 2,20 MAD ; à partir de 1000 → 2,00 MAD. Le prix unitaire ci-dessus reste le prix de base (petites quantités).</div>
+    </div>
     <div class="field"><label>Notes</label><textarea id="pNotes" placeholder="Détails complémentaires…"></textarea></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="cancelProductBtn">Annuler</button>
@@ -504,6 +517,17 @@
   <div class="search" style="margin-bottom:14px;"><span>🔎</span><input id="globalSearchInput" placeholder="Client, produit, fournisseur, numéro de document…"></div>
   <div id="globalSearchResults" style="max-height:60vh;overflow-y:auto;"></div>
   <div class="modal-actions"><button type="button" class="btn btn-ghost btn-block" id="closeSearchBtn">Fermer</button></div>
+</div></div>
+
+<!-- Excel import preview modal -->
+<div class="overlay" id="importPreviewOverlay"><div class="modal" style="max-width:600px;">
+  <h3>Importer des produits depuis Excel</h3>
+  <div class="hint" style="margin-bottom:12px;">Colonnes reconnues (l'ordre n'a pas d'importance) : <strong>Nom</strong> (obligatoire), Dimensions, Grammage, Couleur, Unité, Prix, Devise, Stock, Seuil d'alerte, Fournisseur.</div>
+  <div id="importPreviewList" style="max-height:50vh;overflow-y:auto;margin-bottom:14px;"></div>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-ghost" id="cancelImportBtn">Annuler</button>
+    <button type="button" class="btn btn-primary" id="confirmImportBtn">Importer</button>
+  </div>
 </div></div>
 
 <!-- Company settings modal -->
@@ -760,6 +784,15 @@
     var t = tarifs.find(function(x){return String(x.clientId)===String(clientId) && String(x.productId)===String(productId);});
     return t ? Number(t.unitPrice) : null;
   }
+  function prixParPalier(p, qty){
+    if(!p) return null;
+    var prix = (p.unitPrice!=null)?Number(p.unitPrice):null;
+    if(p.priceTiers && p.priceTiers.length){
+      var tiers = p.priceTiers.slice().sort(function(a,b){return Number(a.minQty)-Number(b.minQty);});
+      tiers.forEach(function(t){ if(Number(qty)>=Number(t.minQty)) prix=Number(t.unitPrice); });
+    }
+    return prix;
+  }
   function lignesDeCommande(o){
     if(o.lines && o.lines.length) return o.lines;
     if(o.productName || o.title){
@@ -793,6 +826,7 @@
     $("newBtn").style.display = newBtnLabels[tab] ? "block" : "none";
     $("newBtn").textContent = newBtnLabels[tab];
     $("orderFilterRow").style.display = tab==="ordersAll" ? "flex" : "none";
+    $("importExcelBtn").style.display = tab==="products" ? "block" : "none";
     $("clientTagFilterRow").style.display = tab==="clients" ? "flex" : "none";
     renderList(); renderDetail();
   }
@@ -1216,16 +1250,23 @@
         lignes[idx].productId=pid;
         if(p){
           lignes[idx].designation=p.name;
-          var prixSpecial = clientIdFn ? tarifClientProduit(clientIdFn(), pid) : null;
-          lignes[idx].unitPrice = (prixSpecial!=null) ? prixSpecial : ((p.unitPrice!=null)?p.unitPrice:lignes[idx].unitPrice);
           if(!lignes[idx].quantity) lignes[idx].quantity=1;
+          var prixSpecial = clientIdFn ? tarifClientProduit(clientIdFn(), pid) : null;
+          lignes[idx].unitPrice = (prixSpecial!=null) ? prixSpecial : prixParPalier(p, lignes[idx].quantity);
         }
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
         setLignes(lignes); renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn);
       } else if(e.target.classList.contains("ln-desc")){
         lignes[idx].designation=e.target.value; setLignes(lignes);
       } else if(e.target.classList.contains("ln-qty") || e.target.classList.contains("ln-pu")){
-        if(e.target.classList.contains("ln-qty")) lignes[idx].quantity=Number(e.target.value||0);
+        if(e.target.classList.contains("ln-qty")){
+          lignes[idx].quantity=Number(e.target.value||0);
+          if(lignes[idx].productId){
+            var pRef=products.find(function(x){return String(x.id)===String(lignes[idx].productId);});
+            var prixSpecial2 = clientIdFn ? tarifClientProduit(clientIdFn(), lignes[idx].productId) : null;
+            lignes[idx].unitPrice = (prixSpecial2!=null) ? prixSpecial2 : prixParPalier(pRef, lignes[idx].quantity);
+          }
+        }
         if(e.target.classList.contains("ln-pu")) lignes[idx].unitPrice=Number(e.target.value||0);
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
         setLignes(lignes); renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn);
@@ -1449,6 +1490,13 @@
     h+='<div class="info-item"><div class="lbl">Stock</div><div class="val">'+(p.stock!=null?p.stock:'—')+(p.seuilAlerte!=null?' (seuil '+p.seuilAlerte+')':'')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Fournisseur</div><div class="val">'+(p.fournisseurName?esc(p.fournisseurName):'—')+'</div></div>';
     h+='</div>';
+    if(p.priceTiers && p.priceTiers.length){
+      h+='<div class="section-head"><h3>Paliers de prix</h3></div>';
+      h+='<div class="tarif-row" style="font-weight:700;"><span>Quantité</span><span>'+nf(p.unitPrice)+' '+(p.currency||"MAD")+' (base)</span></div>';
+      p.priceTiers.slice().sort(function(a,b){return a.minQty-b.minQty;}).forEach(function(t){
+        h+='<div class="tarif-row"><span>À partir de '+t.minQty+'</span><span>'+nf(t.unitPrice)+' '+(p.currency||"MAD")+'</span></div>';
+      });
+    }
     if(p.notes) h+='<div class="notes-block">'+esc(p.notes)+'</div>';
     h+='</div>';
     $("colDetail").innerHTML=h;
@@ -1456,6 +1504,33 @@
     $("duplicateProductBtn").addEventListener("click",function(){ openProductModal(p, true); });
     $("deleteProductBtn").addEventListener("click",function(){ deleteProduct(p); });
   }
+  var productPriceTiers=[];
+  function renderPriceTiersEditor(){
+    var el=$("pTiersEditor");
+    if(!productPriceTiers.length){ el.innerHTML='<div class="hint" style="padding:4px 0;">Aucun palier — un seul prix s\'applique quelle que soit la quantité.</div>'; return; }
+    el.innerHTML = productPriceTiers.map(function(t,idx){
+      return '<div class="tier-row" data-idx="'+idx+'">'
+        +'<input class="tr-qty" type="number" step="1" min="1" data-idx="'+idx+'" placeholder="À partir de (qté)" value="'+(t.minQty||"")+'">'
+        +'<input class="tr-price" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="Prix unitaire" value="'+(t.unitPrice||"")+'">'
+        +'<button type="button" class="rm-btn" data-idx="'+idx+'">✕</button></div>';
+    }).join("");
+  }
+  function wirePriceTiersEditor(){
+    var el=$("pTiersEditor");
+    el.addEventListener("change", function(e){
+      var idx=e.target.getAttribute("data-idx"); if(idx==null) return; idx=Number(idx);
+      if(e.target.classList.contains("tr-qty")) productPriceTiers[idx].minQty=Number(e.target.value||0);
+      if(e.target.classList.contains("tr-price")) productPriceTiers[idx].unitPrice=Number(e.target.value||0);
+    });
+    el.addEventListener("click", function(e){
+      if(e.target.classList.contains("rm-btn")){
+        productPriceTiers.splice(Number(e.target.getAttribute("data-idx")),1);
+        renderPriceTiersEditor();
+      }
+    });
+  }
+  $("pAddTier").addEventListener("click", function(){ productPriceTiers.push({minQty:"",unitPrice:""}); renderPriceTiersEditor(); });
+
   function openProductModal(ex, dupliquer){
     editingProductId=(ex && !dupliquer)?ex.id:null;
     $("productModalTitle").textContent = dupliquer ? "Nouveau produit (à partir de « "+ex.name+" »)" : (ex?"Modifier le produit":"Nouveau produit");
@@ -1468,6 +1543,8 @@
     $("pSeuil").value=(ex&&ex.seuilAlerte!=null&&ex.seuilAlerte!=="")?ex.seuilAlerte:""; $("pNotes").value=ex?(ex.notes||""):"";
     var sel=$("pFournisseur"); sel.innerHTML='<option value="">— Aucun —</option>'+suppliers.map(function(f){return '<option value="'+esc(f.id)+'">'+esc(f.name)+'</option>';}).join("");
     sel.value = ex && ex.fournisseurId ? ex.fournisseurId : "";
+    productPriceTiers = (ex && ex.priceTiers) ? ex.priceTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
+    renderPriceTiersEditor(); wirePriceTiersEditor();
     $("productOverlay").classList.add("open");
     setTimeout(function(){ $("pName").focus(); if(dupliquer) $("pName").select(); },50);
   }
@@ -1477,11 +1554,12 @@
     e.preventDefault();
     var name=$("pName").value.trim(); if(!name){ toast("Le nom du produit est obligatoire"); return; }
     var fid=$("pFournisseur").value; var fs=suppliers.find(function(x){return String(x.id)===String(fid);});
+    var tiersValides = productPriceTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; });
     var p={ id:editingProductId||"", name:name, dimensions:$("pDimensions").value.trim(), grammage:$("pGrammage").value.trim(),
       color:$("pColor").value.trim(), unit:$("pUnit").value, unitPrice:$("pUnitPrice").value?Number($("pUnitPrice").value):null,
       currency:$("pCurrency").value, stock:$("pStock").value!==""?Number($("pStock").value):null,
       seuilAlerte:$("pSeuil").value!==""?Number($("pSeuil").value):null, fournisseurId:fid, fournisseurName: fs?fs.name:"",
-      notes:$("pNotes").value.trim() };
+      priceTiers: tiersValides, notes:$("pNotes").value.trim() };
     var btn=$("saveProductBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
     api({action:"saveProduct",product:p}).then(function(res){
       $("productOverlay").classList.remove("open"); toast(editingProductId?"Produit mis à jour":"Produit créé");
@@ -1797,6 +1875,16 @@
   }
 
   // ===================== DOCUMENTS : construction HTML, impression, PDF, WhatsApp, Excel =====================
+  function genererDocumentPourCommande(type, orderId, btn){
+    var labels = {BC:"Bon de commande", BL:"Bon de livraison", FACTURE:"Facture"};
+    btn.disabled = true; var orig = btn.textContent; btn.textContent = "Génération…";
+    api({action:"genererDocument", type:type, orderId:orderId}).then(function(res){
+      toast(labels[type]+" "+res.document.numero+" créé(e)");
+      return refresh().then(function(){ imprimerDocument(res.document); });
+    }).catch(function(e){ toast("Échec : "+e.message); })
+      .then(function(){ btn.disabled=false; btn.textContent=orig; });
+  }
+
   function messageDocumentWhatsapp(d){
     var montant = nf(d.totalTTC)+' '+(d.currency||'MAD');
     var textes = {
@@ -1898,6 +1986,78 @@
     });
     XLSX.writeFile(wb, filename);
   }
+
+  // ---------- Import Excel de produits ----------
+  var importRowsAValider = [];
+  function normaliserEntete(s){ return String(s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+  function trouverColonne(row, motsClefs){
+    var cles = Object.keys(row);
+    for(var i=0;i<cles.length;i++){
+      var norm = normaliserEntete(cles[i]);
+      for(var j=0;j<motsClefs.length;j++){ if(norm.indexOf(motsClefs[j])!==-1) return row[cles[i]]; }
+    }
+    return "";
+  }
+  $("importExcelBtn").addEventListener("click", function(){ $("importExcelInput").click(); });
+  $("importExcelInput").addEventListener("change", function(){
+    var file=this.files && this.files[0]; this.value="";
+    if(!file) return;
+    if(typeof XLSX === "undefined"){ toast("Import Excel indisponible (bibliothèque non chargée)"); return; }
+    var reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        var wb=XLSX.read(e.target.result, {type:"array"});
+        var premiereFeuille=wb.SheetNames[0];
+        var rows=XLSX.utils.sheet_to_json(wb.Sheets[premiereFeuille], {defval:""});
+        importRowsAValider = rows.map(function(row){
+          return {
+            name: String(trouverColonne(row,["nom","produit","designation","désignation"])).trim(),
+            dimensions: String(trouverColonne(row,["dimension"])).trim(),
+            grammage: String(trouverColonne(row,["grammage","gramm"])).trim(),
+            color: String(trouverColonne(row,["couleur","color"])).trim(),
+            unit: String(trouverColonne(row,["unite","unité","unit"])).trim() || "pièce",
+            unitPrice: Number(trouverColonne(row,["prix"]))||null,
+            currency: String(trouverColonne(row,["devise","currency"])).trim() || "MAD",
+            stock: trouverColonne(row,["stock"])!==""?Number(trouverColonne(row,["stock"])):null,
+            seuilAlerte: trouverColonne(row,["seuil"])!==""?Number(trouverColonne(row,["seuil"])):null,
+            fournisseurName: String(trouverColonne(row,["fournisseur"])).trim()
+          };
+        }).filter(function(r){ return r.name; });
+        if(!importRowsAValider.length){ toast("Aucune ligne avec un nom de produit valide trouvée dans ce fichier"); return; }
+        renderImportPreview();
+        $("importPreviewOverlay").classList.add("open");
+      }catch(err){ toast("Fichier illisible : "+err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+  function renderImportPreview(){
+    $("importPreviewList").innerHTML = '<div class="hint" style="margin-bottom:8px;">'+importRowsAValider.length+' produit(s) détecté(s) :</div>'
+      + importRowsAValider.map(function(r){
+        var fournMatch = suppliers.find(function(f){return f.name.toLowerCase()===r.fournisseurName.toLowerCase();});
+        return '<div class="row-card" style="cursor:default;"><div class="name">'+esc(r.name)+'</div><div class="meta">'
+          +(r.dimensions?'<span>📐 '+esc(r.dimensions)+'</span>':'')+(r.unitPrice!=null?'<span>'+nf(r.unitPrice)+' '+esc(r.currency)+'</span>':'<span style="color:var(--danger);">Prix manquant</span>')
+          +(r.fournisseurName?'<span>'+(fournMatch?'✓':'⚠ nouveau : ')+esc(r.fournisseurName)+'</span>':'')+'</div></div>';
+      }).join("");
+  }
+  $("cancelImportBtn").addEventListener("click", function(){ $("importPreviewOverlay").classList.remove("open"); importRowsAValider=[]; });
+  $("importPreviewOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
+  $("confirmImportBtn").addEventListener("click", async function(){
+    var btn=this; btn.disabled=true;
+    var total=importRowsAValider.length, ok=0, echecs=0;
+    for(var i=0;i<importRowsAValider.length;i++){
+      var r=importRowsAValider[i];
+      btn.textContent="Import "+(i+1)+"/"+total+"…";
+      var fourn = suppliers.find(function(f){return f.name.toLowerCase()===r.fournisseurName.toLowerCase();});
+      var p = { name:r.name, dimensions:r.dimensions, grammage:r.grammage, color:r.color, unit:r.unit,
+        unitPrice:r.unitPrice, currency:r.currency, stock:r.stock, seuilAlerte:r.seuilAlerte,
+        fournisseurId: fourn?fourn.id:"", fournisseurName: fourn?fourn.name:r.fournisseurName, priceTiers:[] };
+      try{ await api({action:"saveProduct", product:p}); ok++; }catch(e){ echecs++; }
+    }
+    $("importPreviewOverlay").classList.remove("open"); importRowsAValider=[];
+    toast(ok+" produit(s) importé(s)"+(echecs?" · "+echecs+" échec(s)":""));
+    btn.disabled=false; btn.textContent="Importer";
+    refresh();
+  });
   function exportDocumentExcel(d){
     var titres={BC:"Bon de commande", BL:"Bon de livraison", FACTURE:"Facture", DEVIS:"Devis", AVOIR:"Avoir"};
     var rows = [ [titres[d.type]||d.type, d.numero], ["Client", d.clientName||""], ["Date", fmtDate(d.date)], [], ["Désignation","Quantité","Prix unitaire","Total"] ];
