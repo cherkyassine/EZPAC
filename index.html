@@ -678,7 +678,7 @@
   $("dashBtn").addEventListener("click", showDash);
   $("setupSaveBtn").addEventListener("click", function(){
     var u=$("setupUrl").value.trim(), k=$("setupKey").value.trim();
-    if(!u || u.indexOf("/exec")===-1){ $("setupStatus").textContent="L'URL doit se terminer par /exec."; return; }
+    if(!u || u.indexOf("http")!==0){ $("setupStatus").textContent="L'URL doit commencer par https://"; return; }
     $("setupStatus").textContent="Connexion…";
     var prev={url:CFG.url,key:CFG.key}; CFG.url=u; CFG.key=k;
     api({action:"ping"}).then(function(res){
