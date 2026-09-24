@@ -381,8 +381,11 @@
       </div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Prix unitaire</label><input id="pUnitPrice" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="field"><label>Prix de vente (TTC)</label><input id="pUnitPrice" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Devise</label><select id="pCurrency"><option>MAD</option></select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Prix d'achat fournisseur (TTC)</label><input id="pPurchasePrice" type="number" step="0.01" placeholder="0.00"></div>
     </div>
     <div class="field-row">
       <div class="field"><label>Stock disponible</label><input id="pStock" type="number" step="1" placeholder="ex : 500"></div>
@@ -1247,7 +1250,7 @@
     html+='<div class="lines-total"><span>Total HT : '+nf(tx.totalHT)+'</span><span>TVA '+tva+'% : '+nf(tx.totalTVA)+'</span><span>TTC : '+nf(tx.totalTTC)+'</span></div>';
     el.innerHTML = lignes.length ? html : '<div class="hint" style="padding:6px 0;">Aucune ligne — cliquez sur « Ajouter une ligne ».</div>';
   }
-  function wireLinesEditor(containerId, getLignes, setLignes, clientIdFn){
+  function wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat){
     var el=$(containerId);
     el.addEventListener("change", function(e){
       var idx = e.target.getAttribute("data-idx"); if(idx==null) return; idx=Number(idx);
@@ -1258,17 +1261,21 @@
         if(p){
           lignes[idx].designation=p.name;
           if(!lignes[idx].quantity) lignes[idx].quantity=1;
-          var prixSpecial = clientIdFn ? tarifClientProduit(clientIdFn(), pid) : null;
-          lignes[idx].unitPrice = (prixSpecial!=null) ? prixSpecial : prixParPalier(p, lignes[idx].quantity);
+          if(modeAchat){
+            lignes[idx].unitPrice = (p.purchasePrice!=null && p.purchasePrice!=="") ? Number(p.purchasePrice) : Number(p.unitPrice||0);
+          } else {
+            var prixSpecial = clientIdFn ? tarifClientProduit(clientIdFn(), pid) : null;
+            lignes[idx].unitPrice = (prixSpecial!=null) ? prixSpecial : prixParPalier(p, lignes[idx].quantity);
+          }
         }
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
-        setLignes(lignes); renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn);
+        setLignes(lignes); renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat);
       } else if(e.target.classList.contains("ln-desc")){
         lignes[idx].designation=e.target.value; setLignes(lignes);
       } else if(e.target.classList.contains("ln-qty") || e.target.classList.contains("ln-pu")){
         if(e.target.classList.contains("ln-qty")){
           lignes[idx].quantity=Number(e.target.value||0);
-          if(lignes[idx].productId){
+          if(lignes[idx].productId && !modeAchat){
             var pRef=products.find(function(x){return String(x.id)===String(lignes[idx].productId);});
             var prixSpecial2 = clientIdFn ? tarifClientProduit(clientIdFn(), lignes[idx].productId) : null;
             lignes[idx].unitPrice = (prixSpecial2!=null) ? prixSpecial2 : prixParPalier(pRef, lignes[idx].quantity);
@@ -1276,14 +1283,14 @@
         }
         if(e.target.classList.contains("ln-pu")) lignes[idx].unitPrice=Number(e.target.value||0);
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
-        setLignes(lignes); renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn);
+        setLignes(lignes); renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat);
       }
     });
     el.addEventListener("click", function(e){
       if(e.target.classList.contains("rm-btn")){
         var idx=Number(e.target.getAttribute("data-idx"));
         var lignes=getLignes(); lignes.splice(idx,1); setLignes(lignes);
-        renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn);
+        renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat);
       }
     });
   }
@@ -1493,7 +1500,8 @@
     h+='<div class="info-item"><div class="lbl">Grammage</div><div class="val">'+(p.grammage?esc(p.grammage):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Couleur</div><div class="val">'+(p.color?esc(p.color):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Unité</div><div class="val">'+(p.unit?esc(p.unit):'—')+'</div></div>';
-    h+='<div class="info-item"><div class="lbl">Prix unitaire</div><div class="val">'+((p.unitPrice!=null&&p.unitPrice!=="")?nf(p.unitPrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Prix de vente</div><div class="val">'+((p.unitPrice!=null&&p.unitPrice!=="")?nf(p.unitPrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Prix d\'achat fournisseur</div><div class="val">'+((p.purchasePrice!=null&&p.purchasePrice!=="")?nf(p.purchasePrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Stock</div><div class="val">'+(p.stock!=null?p.stock:'—')+(p.seuilAlerte!=null?' (seuil '+p.seuilAlerte+')':'')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Fournisseur</div><div class="val">'+(p.fournisseurName?esc(p.fournisseurName):'—')+'</div></div>';
     h+='</div>';
@@ -1545,6 +1553,7 @@
     $("pDimensions").value=ex?(ex.dimensions||""):"";
     $("pGrammage").value=ex?(ex.grammage||""):""; $("pColor").value=ex?(ex.color||""):"";
     $("pUnit").value=ex?(ex.unit||"pièce"):"pièce"; $("pUnitPrice").value=(ex&&ex.unitPrice!=null&&ex.unitPrice!=="")?ex.unitPrice:"";
+    $("pPurchasePrice").value=(ex&&ex.purchasePrice!=null&&ex.purchasePrice!=="")?ex.purchasePrice:"";
     $("pCurrency").value=ex?(ex.currency||"MAD"):"MAD";
     $("pStock").value=(!dupliquer && ex&&ex.stock!=null&&ex.stock!=="")?ex.stock:"";
     $("pSeuil").value=(ex&&ex.seuilAlerte!=null&&ex.seuilAlerte!=="")?ex.seuilAlerte:""; $("pNotes").value=ex?(ex.notes||""):"";
@@ -1564,6 +1573,7 @@
     var tiersValides = productPriceTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; });
     var p={ id:editingProductId||"", name:name, dimensions:$("pDimensions").value.trim(), grammage:$("pGrammage").value.trim(),
       color:$("pColor").value.trim(), unit:$("pUnit").value, unitPrice:$("pUnitPrice").value?Number($("pUnitPrice").value):null,
+      purchasePrice:$("pPurchasePrice").value?Number($("pPurchasePrice").value):null,
       currency:$("pCurrency").value, stock:$("pStock").value!==""?Number($("pStock").value):null,
       seuilAlerte:$("pSeuil").value!==""?Number($("pSeuil").value):null, fournisseurId:fid, fournisseurName: fs?fs.name:"",
       priceTiers: tiersValides, notes:$("pNotes").value.trim() };
@@ -1795,11 +1805,11 @@
     achatFournisseurId=fournisseurId; achatLines=[nouvelleLigneVide()];
     $("aTitle").value=""; $("aDesc").value=""; $("aCurrency").value="MAD";
     renderLinesEditor("aLinesEditor", achatLines);
-    wireLinesEditor("aLinesEditor", function(){return achatLines;}, function(v){achatLines=v;});
+    wireLinesEditor("aLinesEditor", function(){return achatLines;}, function(v){achatLines=v;}, null, true);
     $("achatOverlay").classList.add("open");
     setTimeout(function(){ $("aTitle").focus(); },50);
   }
-  $("aAddLine").addEventListener("click", function(){ achatLines.push(nouvelleLigneVide()); renderLinesEditor("aLinesEditor", achatLines); wireLinesEditor("aLinesEditor", function(){return achatLines;}, function(v){achatLines=v;}); });
+  $("aAddLine").addEventListener("click", function(){ achatLines.push(nouvelleLigneVide()); renderLinesEditor("aLinesEditor", achatLines); wireLinesEditor("aLinesEditor", function(){return achatLines;}, function(v){achatLines=v;}, null, true); });
   $("cancelAchatBtn").addEventListener("click", function(){ $("achatOverlay").classList.remove("open"); });
   $("achatOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
   $("achatForm").addEventListener("submit",function(e){
