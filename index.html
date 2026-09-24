@@ -213,9 +213,9 @@
 </div>
 
 <div id="setupScreen" class="setup" style="display:none;">
-  <h2>Connexion à votre Google Sheet</h2>
-  <p>Collez l'adresse du service Google Apps Script que vous avez déployé, puis votre clé d'accès. Ces informations restent sur cet appareil.</p>
-  <div class="field"><label>URL du service (se termine par /exec)</label><input id="setupUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
+  <h2>Connexion à votre CRM</h2>
+  <p>Collez l'adresse de votre service (fonction Supabase « ezpac-api »), puis votre clé d'accès. Ces informations restent sur cet appareil.</p>
+  <div class="field"><label>URL du service</label><input id="setupUrl" placeholder="https://xxxx.supabase.co/functions/v1/ezpac-api"></div>
   <div class="field"><label>Clé d'accès</label><input id="setupKey" placeholder="Clé complète, ou clé lecture seule"></div>
   <button class="btn btn-primary btn-block" id="setupSaveBtn">Connecter</button>
   <div class="hint" id="setupStatus" style="margin-top:12px;text-align:center;"></div>
@@ -717,7 +717,7 @@
       $("setupStatus").textContent="Connecté."+(appRole==="lecture"?" (lecture seule)":""); showApp(); refresh();
     }).catch(function(e){
       CFG.url=prev.url; CFG.key=prev.key;
-      $("setupStatus").textContent="Échec : "+e.message+" — vérifiez l'URL, la clé, et que le déploiement autorise « Tout le monde ».";
+      $("setupStatus").textContent="Échec : "+e.message+" — vérifiez l'URL et la clé d'accès.";
     });
   });
 
@@ -966,7 +966,7 @@
     cFiles.forEach(function(f){ h+='<div class="file-chip">📎 <a href="'+esc(f.url)+'" target="_blank" rel="noopener">'+esc(f.name)+'</a><span class="size">'+fmtSize(f.sizeBytes)+'</span></div>'; });
     if(!cFiles.length) h+='<div class="empty-hint" style="padding:14px 0;">Aucun fichier joint.</div>';
     h+='</div><div class="upload-row"><input type="file" multiple id="cfile-'+esc(c.id)+'" data-mut="1"><button type="button" class="btn btn-ghost btn-sm" id="cup-'+esc(c.id)+'" data-mut="1">Joindre un fichier</button></div>';
-    h+='<div class="hint" style="margin-bottom:8px;">Enregistrés dans votre Google Drive.</div>';
+    h+='<div class="hint" style="margin-bottom:8px;">Stockés de façon privée dans votre espace Supabase (15 Mo max par fichier).</div>';
 
     var tarifsC = tarifsOf(c.id);
     h+='<div class="section-head"><h3>Tarifs négociés ('+tarifsC.length+')</h3><button class="btn btn-ghost btn-sm" id="newTarifBtn" data-mut="1">+ Tarif</button></div>';
@@ -1445,6 +1445,9 @@
     h+='<div class="info-item"><div class="lbl">Statut</div><div class="val"><select id="qStatut" class="sel" data-mut="1">'
       +(d.statutDevis==="Demande web"?["Demande web","En attente","Accepté","Refusé"]:["En attente","Accepté","Refusé"]).map(function(s){return '<option'+(d.statutDevis===s?' selected':'')+'>'+s+'</option>';}).join("")+'</select></div></div>';
     h+='</div>';
+    if(d.statutDevis==="Demande web" && Number(d.totalTTC)>0 && !(d.lines||[]).some(function(l){ return !Number(l.unitPrice); }))
+      h+='<div style="margin:0 0 12px;"><button class="btn btn-gold" id="envoyerWebBtn" data-mut="1" style="width:100%;">📲 Prix saisis — envoyer le devis au client par WhatsApp</button>'
+        +'<div class="hint" style="margin-top:4px;">Ouvre WhatsApp avec le détail du devis, télécharge le PDF à joindre et passe le devis « En attente ».</div></div>';
     if(d.statutDevis==="Demande web") h+='<div class="summary-bar">🌐 Demande reçue du site web : les prix des produits reconnus sont pré-remplis. Cliquez sur ✎ pour vérifier / compléter les prix, puis passez le statut à « En attente » avant d\x27envoyer le devis.</div>';
     if(d.notes) h+='<div class="notes-block" style="white-space:pre-line;">'+esc(d.notes)+'</div>';
     h+='<div class="section-head"><h3>Détail</h3>'+(d.statutDevis!=="Converti"?'<button class="btn btn-gold btn-sm" id="convertBtn" data-mut="1">✅ Convertir en commande</button>':'<span class="hint">Déjà converti en commande</span>')+'</div>';
@@ -1464,6 +1467,16 @@
     $("waQBtn").addEventListener("click", function(){ envoyerDocumentWhatsapp(d); });
     $("editQBtn").addEventListener("click", function(){ openDocumentEditModal(d); });
     $("delQBtn").addEventListener("click", function(){ supprimerDocument(d, "quotes"); });
+    var ewb=$("envoyerWebBtn");
+    if(ewb) ewb.addEventListener("click", function(){
+      var phone = d.clientPhone || (clients.find(function(c){return String(c.id)===String(d.clientId);})||{}).phone;
+      if(!phone){ toast("Ce client n'a pas de numéro de téléphone"); return; }
+      openWhatsapp(phone, messageDevisDetaille(d)); // ouvert tout de suite (sinon bloqué comme pop-up)
+      telechargerDocumentPDF(d);
+      api({action:"updateDevisStatut", id:d.id, statutDevis:"En attente"})
+        .then(function(){ toast("Devis envoyé — statut « En attente »"); refresh(); })
+        .catch(function(e){ toast("Échec : "+e.message); });
+    });
     $("xlsQBtn").addEventListener("click", function(){ exportDocumentExcel(d); });
     $("qStatut").addEventListener("change", function(){
       api({action:"updateDevisStatut", id:d.id, statutDevis:this.value}).then(function(){ toast("Statut mis à jour"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
@@ -2104,6 +2117,15 @@
       BCF: "Bonjour, veuillez trouver notre bon de commande "+d.numero+" du "+fmtDate(d.date)+" d'un montant de "+montant+". Merci de nous confirmer la disponibilité et le délai de livraison."
     };
     return (textes[d.type]||("Bonjour, voici le document "+d.numero+".")) + "\n\n(PDF en pièce jointe, ou disponible via le bouton 🖨/⬇ de l'application)";
+  }
+  function messageDevisDetaille(d){
+    var dev=d.currency||"MAD";
+    var lignes=(d.lines||[]).map(function(l){
+      return "• "+l.designation+"\n   "+nf(l.quantity)+" × "+nf(l.unitPrice)+" "+dev+" = "+nf(l.total)+" "+dev;
+    }).join("\n");
+    return "Bonjour "+(d.clientName||"")+",\n\nMerci pour votre demande sur notre site. Voici notre devis "+d.numero+" :\n\n"+lignes
+      +"\n\nTotal TTC : "+nf(d.totalTTC)+" "+dev+"\nDevis valable 30 jours. Le devis en PDF suit ce message."
+      +"\n\nPour confirmer votre commande, répondez simplement à ce message.\n"+((invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC");
   }
   function envoyerDocumentWhatsapp(d){
     var phone = d.clientPhone || (clients.find(function(c){return String(c.id)===String(d.clientId);})||{}).phone;
