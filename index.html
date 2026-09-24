@@ -1380,12 +1380,16 @@
     h+='<div class="info-item"><div class="lbl">Statut</div><div class="val"><select id="qStatut" class="sel" data-mut="1">'
       +(d.statutDevis==="Demande web"?["Demande web","En attente","Accepté","Refusé"]:["En attente","Accepté","Refusé"]).map(function(s){return '<option'+(d.statutDevis===s?' selected':'')+'>'+s+'</option>';}).join("")+'</select></div></div>';
     h+='</div>';
-    if(d.statutDevis==="Demande web") h+='<div class="summary-bar">🌐 Demande reçue du site web : cliquez sur ✎ pour saisir les prix, puis passez le statut à « En attente » avant d\x27envoyer le devis.</div>';
+    if(d.statutDevis==="Demande web") h+='<div class="summary-bar">🌐 Demande reçue du site web : les prix des produits reconnus sont pré-remplis. Cliquez sur ✎ pour vérifier / compléter les prix, puis passez le statut à « En attente » avant d\x27envoyer le devis.</div>';
     if(d.notes) h+='<div class="notes-block" style="white-space:pre-line;">'+esc(d.notes)+'</div>';
     h+='<div class="section-head"><h3>Détail</h3>'+(d.statutDevis!=="Converti"?'<button class="btn btn-gold btn-sm" id="convertBtn" data-mut="1">✅ Convertir en commande</button>':'<span class="hint">Déjà converti en commande</span>')+'</div>';
     (d.lines||[]).forEach(function(l){
       h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(l.designation)+'</div>'
-        +'<div class="item-sub">'+l.quantity+' × '+nf(l.unitPrice)+' '+(d.currency||"MAD")+'</div></div>'
+        +'<div class="item-sub">'+l.quantity+' × '+nf(l.unitPrice)+' '+(d.currency||"MAD")+'</div>'
+        +(function(){ if(d.statutDevis!=="Demande web") return ""; var p=l.productId && products.find(function(x){return String(x.id)===String(l.productId);});
+          var sansImp = l.sansImpression && !Number(l.unitPrice) ? '<div class="item-sub" style="color:var(--danger);">⚠ Sans impression : prix à saisir'+(l.refPrice?' (prix imprimé : '+nf(l.refPrice)+' '+(d.currency||"MAD")+')':'')+'</div>' : '';
+          return p ? '<div class="item-sub" style="color:var(--success);">🔗 Produit catalogue : '+esc(p.name)+'</div>'+sansImp : sansImp+'<div class="item-sub" style="color:var(--danger);">⚠ Aucun produit du catalogue trouvé — prix à saisir</div>'; })()
+        +'</div>'
         +'<div style="font-weight:700;">'+nf(l.total)+' '+(d.currency||"MAD")+'</div></div></div>';
     });
     h+='</div>';
