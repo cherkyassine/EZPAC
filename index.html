@@ -1351,7 +1351,7 @@
     var el=$("listScroll");
     if(!list.length){ el.innerHTML='<div class="empty-hint">'+(documents.some(function(d){return d.type==="DEVIS";})?"Aucun devis ne correspond.":"Aucun devis pour l'instant.<br>Créez-en un depuis la fiche d'un client.")+'</div>'; return; }
     el.innerHTML=list.map(function(d){
-      var stCls = d.statutDevis==="Accepté"?"pill-success":d.statutDevis==="Refusé"?"pill-danger":d.statutDevis==="Converti"?"pill-navy":"pill-amber";
+      var stCls = d.statutDevis==="Accepté"?"pill-success":d.statutDevis==="Refusé"?"pill-danger":d.statutDevis==="Converti"?"pill-navy":d.statutDevis==="Demande web"?"pill-danger":"pill-amber";
       return '<div class="row-card'+(d.id===currentId.quotes?" active":"")+'" data-id="'+esc(d.id)+'">'
         +'<div class="name">'+esc(d.numero)+'</div><div class="meta"><span>'+esc(d.clientName||"")+'</span><span>'+fmtDate(d.date)+'</span></div>'
         +'<div class="price">'+nf(d.totalTTC)+' '+(d.currency||"MAD")+' · <span class="pill '+stCls+'" style="margin-left:4px;">'+esc(d.statutDevis||"")+'</span></div></div>';
@@ -1369,8 +1369,10 @@
     h+='<div class="info-item"><div class="lbl">TVA ('+(d.tvaRate||0)+'%)</div><div class="val">'+nf(d.totalTVA)+' '+(d.currency||"MAD")+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Total TTC</div><div class="val"><strong>'+nf(d.totalTTC)+' '+(d.currency||"MAD")+'</strong></div></div>';
     h+='<div class="info-item"><div class="lbl">Statut</div><div class="val"><select id="qStatut" class="sel" data-mut="1">'
-      +["En attente","Accepté","Refusé"].map(function(s){return '<option'+(d.statutDevis===s?' selected':'')+'>'+s+'</option>';}).join("")+'</select></div></div>';
+      +(d.statutDevis==="Demande web"?["Demande web","En attente","Accepté","Refusé"]:["En attente","Accepté","Refusé"]).map(function(s){return '<option'+(d.statutDevis===s?' selected':'')+'>'+s+'</option>';}).join("")+'</select></div></div>';
     h+='</div>';
+    if(d.statutDevis==="Demande web") h+='<div class="summary-bar">🌐 Demande reçue du site web : cliquez sur ✎ pour saisir les prix, puis passez le statut à « En attente » avant d\x27envoyer le devis.</div>';
+    if(d.notes) h+='<div class="notes-block" style="white-space:pre-line;">'+esc(d.notes)+'</div>';
     h+='<div class="section-head"><h3>Détail</h3>'+(d.statutDevis!=="Converti"?'<button class="btn btn-gold btn-sm" id="convertBtn" data-mut="1">✅ Convertir en commande</button>':'<span class="hint">Déjà converti en commande</span>')+'</div>';
     (d.lines||[]).forEach(function(l){
       h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(l.designation)+'</div>'
