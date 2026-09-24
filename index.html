@@ -565,7 +565,7 @@
       <div class="field"><label>Email</label><input id="stEmail" type="email" placeholder="contact@entreprise.ma"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Site web</label><input id="stWeb" placeholder="ezpac.net"></div>
+      <div class="field"><label>Site web</label><input id="stWeb" placeholder="ezpac.ma"></div>
       <div class="field"><label>Capital social</label><input id="stCapital" placeholder="150.000,00 DH"></div>
     </div>
     <div class="field"><label>RIB</label><input id="stRib" placeholder="230 810 5004520221033200 56"></div>
@@ -604,7 +604,7 @@
   var activeTab = "clients";
   var invoiceSettings = { raisonSociale:'EZPAC', adresse:'Meryem 4 Z.I. Ain Atiq 12020 – Maroc', ice:'003254351000070', rc:'167169',
     ifiscal:'53685916', patente:'25910031', cnss:'5092893', telephone:'+212 6 16 16 35 36 / +212 8 08 58 64 26',
-    email:'ezpacsarl@gmail.com', siteWeb:'ezpac.net', capitalSocial:'150.000,00 DH', rib:'230 810 5004520221033200 56',
+    email:'ezpacsarl@gmail.com', siteWeb:'ezpac.ma', capitalSocial:'150.000,00 DH', rib:'230 810 5004520221033200 56',
     tvaDefaut:20, piedPage:'', emailAlertes:'', alertesActives:false };
   var openItemIds = {};
   var revChartInstance = null;
@@ -2139,16 +2139,16 @@
   function messageDevisDetaille(d){
     var dev=d.currency||"MAD";
     var lignes=(d.lines||[]).map(function(l){
-      return "• "+l.designation+"\n   "+nf(l.quantity)+" × "+nf(l.unitPrice)+" "+dev+" = "+nf(l.total)+" "+dev;
+      return "•  "+l.designation+"\n   "+nf(l.quantity)+" × "+nf(l.unitPrice)+" "+dev+" = "+nf(l.total)+" "+dev;
     }).join("\n");
-    return "Bonjour "+(d.clientName||"")+",\n\nMerci pour votre demande sur notre site. Voici notre devis "+d.numero+" :\n\n"+lignes
+    return "Bonjour "+(d.clientName||"")+",\n\nVotre devis est "+d.numero+" :\n\n"+lignes
       +"\n\nTotal TTC : "+nf(d.totalTTC)+" "+dev+"\nDevis valable 30 jours. Le devis en PDF suit ce message."
       +"\n\nPour confirmer votre commande, répondez simplement à ce message.\n"+((invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC");
   }
   function envoyerDocumentWhatsapp(d){
     var phone = d.clientPhone || (clients.find(function(c){return String(c.id)===String(d.clientId);})||{}).phone;
     if(!phone){ toast("Ce client n'a pas de numéro de téléphone enregistré"); return; }
-    openWhatsapp(phone, messageDocumentWhatsapp(d));
+    openWhatsapp(phone, d.type==="DEVIS" ? messageDevisDetaille(d) : messageDocumentWhatsapp(d));
   }
   // ---------- Montant en lettres (dirhams) ----------
   function nombreEnLettres(n){
@@ -2193,6 +2193,7 @@
   function genererHtmlDocument(d){
     var titres={BC:"Bon de commande", BL:"Bon de livraison", FACTURE:"Facture", DEVIS:"Devis", AVOIR:"Avoir", BCF:"Bon de commande fournisseur"};
     var s=invoiceSettings||{}, dev=d.currency||"MAD", lignes=d.lines||[];
+    var siteDoc=String(s.siteWeb||"ezpac.ma").replace(/ezpac\.net/i,"ezpac.ma");
     var avecPrix = d.type!=="BL";
     // Les lignes sont-elles saisies TTC (règle actuelle) ou HT (anciens documents) ?
     var somme = lignes.reduce(function(a,l){ return a+Number(l.total||0); },0);
@@ -2238,6 +2239,7 @@
       +'.ezdoc .hdr img{height:70px;width:auto;max-width:230px;object-fit:contain;display:block;}'
       +'.ezdoc .soc{text-align:right;font-size:11px;color:#4A5260;line-height:1.55;}'
       +'.ezdoc .soc b{color:#1F2B45;font-size:12.5px;}'
+      +'.ezdoc .soc a{color:#4A5260;text-decoration:none;}'
       +'.ezdoc .titre{display:flex;justify-content:space-between;align-items:flex-end;margin:26px 0 18px;padding-bottom:12px;border-bottom:2px solid #1F2B45;}'
       +'.ezdoc h1{margin:0;font-size:26px;letter-spacing:.06em;text-transform:uppercase;color:#1F2B45;font-weight:800;}'
       +'.ezdoc .meta{display:flex;gap:18px;}'
@@ -2278,7 +2280,9 @@
       +'<div class="hdr"><img src="'+LOGO_DATA_URI+'" alt="'+esc(s.raisonSociale||'')+'" onerror="this.style.display=\'none\'">'
       +'<div class="soc"><b>'+esc(s.raisonSociale||'')+'</b><br>'+(s.adresse?esc(s.adresse)+'<br>':'')
       +(s.telephone?'Tél. : '+esc(s.telephone)+'<br>':'')
-      +(s.email?esc(s.email):'')+(s.siteWeb?' · '+esc(s.siteWeb):'')+(s.ice?'<br>ICE : '+esc(s.ice):'')+'</div></div>'
+      +(s.email?'<a href="mailto:'+esc(s.email)+'">'+esc(s.email)+'</a>':'')
+      +(siteDoc?' · <a href="'+esc(/^https?:\/\//i.test(siteDoc)?siteDoc:'http://'+siteDoc)+'">'+esc(siteDoc.replace(/^https?:\/\//i,'').replace(/\/$/,''))+'</a>':'')
+      +(s.ice?'<br>ICE : '+esc(s.ice):'')+'</div></div>'
       +'<div class="titre"><h1>'+esc(titres[d.type]||d.type)+'</h1>'+infosDoc+'</div>'
       +'<div class="parties"><div class="dest"><div class="lbl">'+destLabel+'</div><div class="nom">'+esc(d.clientName||"")+'</div>'
       +(d.clientAddress?'<div class="l">'+esc(d.clientAddress)+'</div>':'')
