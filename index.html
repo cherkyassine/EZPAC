@@ -1413,6 +1413,23 @@
     }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; btn.textContent="Créer le devis"; });
   });
 
+  // Demandes du site regroupées par source (pub Facebook, Google…) : combien de demandes, combien gagnées
+  function bilanSourcesWeb(jours){
+    var depuis=Date.now()-jours*86400000, parSource={};
+    documents.forEach(function(d){
+      if(d.type!=="DEVIS" || !/Demande reçue depuis le site web/.test(d.notes||"")) return;
+      if(new Date(d.createdAt||d.date).getTime()<depuis) return;
+      var m=/^Source : (.+?)(?: — |$)/m.exec(d.notes||""), src=m?m[1]:"Non renseignée";
+      var b=parSource[src]||(parSource[src]={n:0,gagnes:0,montant:0});
+      b.n++; if(d.statutDevis==="Accepté"||d.statutDevis==="Converti"){ b.gagnes++; b.montant+=Number(d.totalTTC||0); }
+    });
+    var cles=Object.keys(parSource).sort(function(a,b){return parSource[b].n-parSource[a].n;});
+    if(!cles.length) return "";
+    return '<div class="notes-block" style="margin:0 0 10px;font-size:12.5px;"><strong>🌐 Demandes du site ('+jours+' j) par source</strong><br>'
+      +cles.map(function(k){ var b=parSource[k];
+        return esc(k)+' : <strong>'+b.n+'</strong> demande'+(b.n>1?'s':'')+(b.gagnes?' · <span style="color:var(--success);">'+b.gagnes+' gagnée'+(b.gagnes>1?'s':'')+' ('+nf(b.montant)+' MAD)</span>':'');
+      }).join('<br>')+'</div>';
+  }
   function renderQuoteList(){
     var q=($("searchInput").value||"").toLowerCase().trim();
     var list=documents.filter(function(d){return d.type==="DEVIS";}).filter(function(d){
@@ -1423,8 +1440,9 @@
       return String(b.createdAt||b.date||"").localeCompare(String(a.createdAt||a.date||""));
     });
     var el=$("listScroll");
+    var bilan=bilanSourcesWeb(60);
     if(!list.length){ el.innerHTML='<div class="empty-hint">'+(documents.some(function(d){return d.type==="DEVIS";})?"Aucun devis ne correspond.":"Aucun devis pour l'instant.<br>Créez-en un depuis la fiche d'un client.")+'</div>'; return; }
-    el.innerHTML=list.map(function(d){
+    el.innerHTML=bilan+list.map(function(d){
       var stCls = d.statutDevis==="Accepté"?"pill-success":d.statutDevis==="Refusé"?"pill-danger":d.statutDevis==="Converti"?"pill-navy":d.statutDevis==="Demande web"?"pill-danger":"pill-amber";
       return '<div class="row-card'+(d.id===currentId.quotes?" active":"")+'" data-id="'+esc(d.id)+'">'
         +'<div class="name">'+esc(d.numero)+'</div><div class="meta"><span>'+esc(d.clientName||"")+'</span><span>'+fmtDate(d.date)+'</span></div>'
