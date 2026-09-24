@@ -580,6 +580,16 @@
       </div>
       <div class="hint" id="alertesStatus" style="margin-top:8px;"></div>
     </div>
+    <div class="field" style="border-top:1px solid var(--line);padding-top:14px;">
+      <label>💾 Sauvegarde complète des données</label>
+      <div class="hint" style="margin-bottom:8px;">Un seul fichier (.json) avec toutes les données : clients, commandes, devis, factures, produits, stock, fournisseurs, achats, paramètres… Il permet de tout restaurer, même dans un nouveau projet Supabase. À faire chaque semaine et à garder dans le Drive.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-primary btn-sm" id="sauvegardeBtn">⬇ Télécharger la sauvegarde</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="restaurerBtn" data-mut="1">⬆ Restaurer une sauvegarde…</button>
+        <input type="file" id="restaurerFichier" accept=".json,application/json" style="display:none;">
+      </div>
+      <div class="hint" id="sauvegardeStatus" style="margin-top:8px;"></div>
+    </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="cancelCompanyBtn">Annuler</button>
       <button type="submit" class="btn btn-primary" id="saveCompanyBtn">Enregistrer</button>
@@ -761,6 +771,56 @@
       $("alertesStatus").textContent="✅ Alertes actives — envoyées chaque matin à 8h."; toast("Alertes quotidiennes activées");
     }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
   });
+  // ===================== SAUVEGARDE / RESTAURATION =====================
+  var ORDRE_RESTAURATION = ["parametres","compteurs","fournisseurs","transporteurs","clients","produits","commandes","tarifs","achats","etiquettes","documents","rappels","mouvements_stock"];
+  $("sauvegardeBtn").addEventListener("click", function(){
+    var btn=this; btn.disabled=true; $("sauvegardeStatus").textContent="Préparation de la sauvegarde…";
+    api({action:"sauvegardeComplete"}).then(function(res){
+      var sv=res.sauvegarde, total=0;
+      Object.keys(sv.tables).forEach(function(t){ total+=sv.tables[t].length; });
+      var blob=new Blob([JSON.stringify(sv)], {type:"application/json"});
+      var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+      a.download="ezpac-sauvegarde-"+sv.date.slice(0,10)+".json"; document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      try{ localStorage.setItem("ezpac_derniere_sauvegarde", sv.date); }catch(e){}
+      $("sauvegardeStatus").textContent="✅ Sauvegarde téléchargée ("+total+" lignes). Rangez le fichier dans le Drive.";
+    }).catch(function(e){ $("sauvegardeStatus").textContent="Échec : "+e.message; })
+      .then(function(){ btn.disabled=false; });
+  });
+  $("restaurerBtn").addEventListener("click", function(){ $("restaurerFichier").value=""; $("restaurerFichier").click(); });
+  $("restaurerFichier").addEventListener("change", function(){
+    var f=this.files && this.files[0]; if(!f) return;
+    var lecteur=new FileReader();
+    lecteur.onload=async function(){
+      var sv; try{ sv=JSON.parse(lecteur.result); }catch(e){ toast("Fichier illisible : ce n'est pas une sauvegarde EZPAC"); return; }
+      if(!sv || sv.format!=="ezpac-sauvegarde" || !sv.tables){ toast("Ce fichier n'est pas une sauvegarde EZPAC"); return; }
+      var resume=ORDRE_RESTAURATION.filter(function(t){ return (sv.tables[t]||[]).length; })
+        .map(function(t){ return "• "+t+" : "+sv.tables[t].length; }).join("\n");
+      var ok=prompt("Restaurer la sauvegarde du "+fmtDate(sv.date)+" ?\n\n"+resume
+        +"\n\nLes lignes de la sauvegarde remplacent celles qui ont le même identifiant ; les autres données actuelles sont conservées."
+        +"\n\nPour confirmer, tapez RESTAURER :");
+      if(ok===null) return;
+      if(String(ok).trim().toUpperCase()!=="RESTAURER"){ toast("Restauration annulée"); return; }
+      var btn=$("restaurerBtn"); btn.disabled=true;
+      var total=0, fait=0; ORDRE_RESTAURATION.forEach(function(t){ total+=(sv.tables[t]||[]).length; });
+      try{
+        for(var i=0;i<ORDRE_RESTAURATION.length;i++){
+          var t=ORDRE_RESTAURATION[i], lignes=sv.tables[t]||[];
+          if(t==="documents") lignes=lignes.slice().sort(function(a,b){ return (a.ref_doc_id?1:0)-(b.ref_doc_id?1:0); }); // factures avant avoirs
+          for(var j=0;j<lignes.length;j+=300){
+            await api({action:"restaurerLignes", table:t, lignes:lignes.slice(j,j+300)});
+            fait+=Math.min(300, lignes.length-j);
+            $("sauvegardeStatus").textContent="Restauration… "+t+" ("+Math.round(fait*100/Math.max(total,1))+" %)";
+          }
+        }
+        $("sauvegardeStatus").textContent="✅ Restauration terminée : "+fait+" lignes.";
+        toast("Sauvegarde restaurée"); await refresh();
+      }catch(e){ $("sauvegardeStatus").textContent="Échec de la restauration : "+e.message+" ("+fait+" lignes restaurées avant l'erreur)"; }
+      btn.disabled=false;
+    };
+    lecteur.readAsText(f);
+  });
+
   $("desactiverAlertesBtn").addEventListener("click", function(){
     var btn=this; btn.disabled=true;
     api({action:"supprimerAlerteQuotidienne"}).then(function(){
