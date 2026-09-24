@@ -208,6 +208,7 @@
   <button class="bar-btn" id="dashBtn" title="Tableau de bord">📊</button>
   <button class="bar-btn" id="refreshBtn" title="Actualiser">↻</button>
   <button class="bar-btn" id="companyBtn" title="Coordonnées de l'entreprise" data-mut="1">🏢</button>
+  <button class="bar-btn" id="exportAllBtn" title="Sauvegarde : exporter tout le CRM (Excel)">💾</button>
   <button class="bar-btn" id="settingsBtn" title="Configuration">⚙</button>
 </div>
 
@@ -685,6 +686,26 @@
   }
 
   $("settingsBtn").addEventListener("click", showSetup);
+  $("exportAllBtn").addEventListener("click", exporterTout);
+  function exporterTout(){
+    if(typeof XLSX === "undefined"){ toast("Export Excel indisponible (bibliothèque non chargée)"); return; }
+    var btn=$("exportAllBtn"); btn.disabled=true; toast("Préparation de la sauvegarde…");
+    var plat=function(liste){ return (liste||[]).map(function(o){ var r={}; Object.keys(o).forEach(function(k){ var v=o[k]; r[k]=(v!==null && typeof v==="object") ? JSON.stringify(v) : v; }); return r; }); };
+    refresh().then(function(){
+      return api({action:"mouvementsStock", limit:100000}).then(function(r){ return r.mouvements||[]; }).catch(function(){ return []; });
+    }).then(function(mouvements){
+      var lignesDocs=[];
+      documents.forEach(function(d){ (d.lines||[]).forEach(function(l){ lignesDocs.push({ document:d.numero, type:d.type, date:d.date, client:d.clientName,
+        designation:l.designation, quantite:l.quantity!=null?l.quantity:l.quantite, prixUnitaire:l.unitPrice!=null?l.unitPrice:l.prixUnitaire, total:l.total }); }); });
+      var feuilles = { "Clients":clients, "Commandes":orders, "Devis-Factures-BL":documents, "Lignes documents":lignesDocs, "Produits":products,
+        "Mouvements stock":mouvements, "Fournisseurs":suppliers, "Achats":achats, "Tarifs clients":tarifs, "Rappels":rappels,
+        "Transporteurs":transporteurs, "Etiquettes":etiquettes, "Parametres":[invoiceSettings] };
+      var wb=XLSX.utils.book_new();
+      Object.keys(feuilles).forEach(function(nom){ XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(plat(feuilles[nom])), nom.slice(0,31)); });
+      XLSX.writeFile(wb, "ezpac-crm-sauvegarde-"+new Date().toISOString().slice(0,10)+".xlsx");
+      toast("Sauvegarde téléchargée");
+    }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
+  }
   $("dashBtn").addEventListener("click", showDash);
   $("setupSaveBtn").addEventListener("click", function(){
     var u=$("setupUrl").value.trim(), k=$("setupKey").value.trim();
@@ -718,11 +739,11 @@
   $("companyForm").addEventListener("submit", function(e){
     e.preventDefault();
     if(!$("stName").value.trim()){ toast("La raison sociale est obligatoire"); return; }
-    var s = { raisonSociale:$("stName").value.trim(), adresse:$("stAddress").value.trim(), ice:$("stIce").value.trim(),
+    var s = Object.assign({}, invoiceSettings, { raisonSociale:$("stName").value.trim(), adresse:$("stAddress").value.trim(), ice:$("stIce").value.trim(),
       rc:$("stRc").value.trim(), ifiscal:$("stIf").value.trim(), patente:$("stPatente").value.trim(), cnss:$("stCnss").value.trim(),
       tvaDefaut: $("stTva").value?Number($("stTva").value):20, telephone:$("stPhone").value.trim(), email:$("stEmail").value.trim(),
       siteWeb:$("stWeb").value.trim(), capitalSocial:$("stCapital").value.trim(), rib:$("stRib").value.trim(),
-      piedPage:$("stFooter").value.trim(), emailAlertes:$("stEmailAlertes").value.trim(), alertesActives:invoiceSettings.alertesActives };
+      piedPage:$("stFooter").value.trim(), emailAlertes:$("stEmailAlertes").value.trim(), alertesActives:invoiceSettings.alertesActives });
     var btn=$("saveCompanyBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
     api({action:"saveSettings", settings:s}).then(function(){
       invoiceSettings=s; $("companyOverlay").classList.remove("open"); toast("Coordonnées enregistrées");
@@ -751,7 +772,7 @@
     var btn=this; btn.disabled=true; btn.textContent="Envoi…";
     api({action:"saveSettings", settings:Object.assign({}, invoiceSettings, {emailAlertes:$("stEmailAlertes").value.trim()})}).then(function(){
       return api({action:"testerAlerteQuotidienne"});
-    }).then(function(){ toast("Email de test envoyé (s'il y a quelque chose à signaler)"); })
+    }).then(function(){ toast("Email de test envoyé à "+$("stEmailAlertes").value.trim()); })
       .catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; btn.textContent="Tester maintenant"; });
   });
 
@@ -999,6 +1020,14 @@
       var docId=btn.getAttribute("data-pdf-doc"); var doc=documents.find(function(x){return String(x.id)===String(docId);});
       if(doc) btn.addEventListener("click",function(e){ e.stopPropagation(); telechargerDocumentPDF(doc); });
     });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-print-etq]'), function(btn){
+      var etq=etiquettes.find(function(x){return String(x.id)===String(btn.getAttribute("data-print-etq"));});
+      if(etq) btn.addEventListener("click",function(e){ e.stopPropagation(); imprimerEtiquette(etq); });
+    });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-del-etq]'), function(btn){
+      var etq=etiquettes.find(function(x){return String(x.id)===String(btn.getAttribute("data-del-etq"));});
+      if(etq) btn.addEventListener("click",function(e){ e.stopPropagation(); supprimerEtiquette(etq); });
+    });
     Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-del-doc]'), function(btn){
       var docId=btn.getAttribute("data-del-doc"); var doc=documents.find(function(x){return String(x.id)===String(docId);});
       if(doc) btn.addEventListener("click",function(e){ e.stopPropagation(); supprimerDocument(doc); });
@@ -1054,6 +1083,12 @@
         +'<button type="button" class="btn btn-ghost btn-sm" data-wa-doc="'+esc(doc.id)+'" style="padding:3px 8px;color:var(--success);">💬</button>'
         +'<button type="button" class="btn btn-ghost btn-sm" data-del-doc="'+esc(doc.id)+'" data-mut="1" title="Supprimer" style="padding:3px 8px;color:var(--danger);">🗑</button></div>';
     });
+    etiquettes.filter(function(e){ return String(e.orderId)===String(o.id); }).forEach(function(e){
+      h+='<div class="h-item" style="align-items:center;"><span class="h-dot"></span><span style="flex:1;">🏷️ <strong>Étiquette</strong> '+esc(e.transporteurName||"")
+        +(e.trackingNumber?' · suivi '+esc(e.trackingNumber):'')+' · '+esc(e.colis||1)+' colis — <span class="h-when">'+fmtDate(e.createdAt)+'</span></span>'
+        +'<button type="button" class="btn btn-ghost btn-sm" data-print-etq="'+esc(e.id)+'" style="padding:3px 8px;">🖨</button>'
+        +'<button type="button" class="btn btn-ghost btn-sm" data-del-etq="'+esc(e.id)+'" data-mut="1" title="Supprimer" style="padding:3px 8px;color:var(--danger);">🗑</button></div>';
+    });
     h+='<div class="item-row" style="margin-top:8px;">';
     h+='<button type="button" class="btn btn-ghost btn-sm" data-gen="BC" data-order="'+esc(o.id)+'" data-mut="1">📄 Bon de commande</button>';
     h+='<button type="button" class="btn btn-ghost btn-sm" data-gen="BL" data-order="'+esc(o.id)+'" data-mut="1">🚚 Bon de livraison</button>';
@@ -1098,7 +1133,7 @@
     var nf2=(o.files||[]).slice(), ok=0;
     for(var i=0;i<fileList.length;i++){
       var f=fileList[i];
-      if(f.size > 20*1024*1024){ toast("Trop volumineux (max 20 Mo) : "+f.name); continue; }
+      if(f.size > 15*1024*1024){ toast("Trop volumineux (max 15 Mo) : "+f.name); continue; }
       try{ var b64=await readBase64(f); var res=await api({action:"uploadFile", filename:f.name, mimeType:f.type||"application/octet-stream", data:b64}); nf2.push(res.file); ok++; }
       catch(e){ toast("Échec : "+f.name); }
     }
@@ -1110,7 +1145,7 @@
     var nf2=(c.files||[]).slice(), ok=0;
     for(var i=0;i<fileList.length;i++){
       var f=fileList[i];
-      if(f.size > 20*1024*1024){ toast("Trop volumineux (max 20 Mo) : "+f.name); continue; }
+      if(f.size > 15*1024*1024){ toast("Trop volumineux (max 15 Mo) : "+f.name); continue; }
       try{ var b64=await readBase64(f); var res=await api({action:"uploadFile", filename:f.name, mimeType:f.type||"application/octet-stream", data:b64}); nf2.push(res.file); ok++; }
       catch(e){ toast("Échec : "+f.name); }
     }
@@ -1171,13 +1206,26 @@
   $("scanGalleryBtn").addEventListener("click", function(){ $("cardInputGallery").click(); });
   $("cardInputCamera").addEventListener("change", function(){ handleCardFile(this, $("scanCameraBtn"), "📷 Prendre une photo"); });
   $("cardInputGallery").addEventListener("change", function(){ handleCardFile(this, $("scanGalleryBtn"), "🖼️ Depuis la galerie"); });
+  function imageReduite(file, max){
+    return new Promise(function(res){
+      var u=URL.createObjectURL(file), img=new Image();
+      img.onload=function(){
+        var k=Math.min(1, max/Math.max(img.width, img.height)), c=document.createElement("canvas");
+        c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+        c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(u);
+        res({ data:c.toDataURL("image/jpeg",0.85).split(",")[1], mime:"image/jpeg" });
+      };
+      img.onerror=function(){ URL.revokeObjectURL(u); readBase64(file).then(function(b){ res({ data:b, mime:file.type||"image/jpeg" }); }); };
+      img.src=u;
+    });
+  }
   async function handleCardFile(input, btn, label){
     var file=input.files && input.files[0]; input.value="";
     if(!file) return;
-    btn.disabled=true; btn.textContent="Lecture…"; $("scanStatus").textContent="Envoi de l'image à votre Google Drive pour lecture…"; $("scanRawWrap").style.display="none";
+    btn.disabled=true; btn.textContent="Lecture…"; $("scanStatus").textContent="Lecture de la carte en cours (quelques secondes)…"; $("scanRawWrap").style.display="none";
     try{
-      var b64=await readBase64(file);
-      var res=await api({action:"scanCard", mimeType:file.type||"image/jpeg", data:b64});
+      var img=await imageReduite(file, 1600);
+      var res=await api({action:"scanCard", mimeType:img.mime, data:img.data});
       if(!res.champs){ $("scanStatus").textContent=res.message||"Aucun texte lisible sur cette image."; }
       else{
         var f=res.champs, n=0;
@@ -1433,6 +1481,7 @@
     var noms={DEVIS:"le devis",FACTURE:"la facture",AVOIR:"l'avoir",BC:"le bon de commande",BL:"le bon de livraison"};
     var msg="Supprimer "+(noms[d.type]||"le document")+" "+d.numero+" ? Cette action est définitive.";
     if(d.type==="BL"||d.type==="FACTURE") msg+=" Le stock sera remis si la commande n'a plus ni BL ni facture.";
+    if(d.type==="AVOIR") msg+=" Les quantités remises en stock par cet avoir seront retirées.";
     if(!confirm(msg)) return;
     api({action:"deleteDocument", id:d.id}).then(function(){
       if(kind) currentId[kind]=null;
@@ -1501,10 +1550,10 @@
     });
     var avBtn=$("avoirBtn");
     if(avBtn) avBtn.addEventListener("click", function(){
-      if(!confirm("Créer un avoir annulant la facture "+d.numero+" ?")) return;
+      if(!confirm("Créer un avoir annulant la facture "+d.numero+" ? Les quantités seront remises en stock.")) return;
       avBtn.disabled=true; avBtn.textContent="Création…";
       api({action:"genererAvoir", factureId:d.id}).then(function(res){
-        toast("Avoir "+res.document.numero+" créé"); return refresh().then(function(){ imprimerDocument(res.document); });
+        toast(res.avertissement ? "⚠ "+res.avertissement : "Avoir "+res.document.numero+" créé — stock remis"); return refresh().then(function(){ imprimerDocument(res.document); });
       }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ avBtn.disabled=false; avBtn.textContent="🔄 Créer un avoir"; });
     });
   }
@@ -1579,7 +1628,7 @@
     api({action:"mouvementsStock", productId:p.id, limit:100}).then(function(res){
       var el=$("mvtStock"); if(!el) return;
       var m=res.mouvements||[];
-      if(!m.length){ el.innerHTML='<div class="hint">Aucun mouvement enregistré. Le stock se met à jour automatiquement : + à la réception d\'un achat (statut « Reçu »), − au 1er BL ou à la 1re facture d\'une commande.</div>'; return; }
+      if(!m.length){ el.innerHTML='<div class="hint">Aucun mouvement enregistré. Le stock se met à jour automatiquement : + à la réception d\'un achat (statut « Reçu »), − au 1er BL ou à la 1re facture d\'une commande, + à l\'avoir.</div>'; return; }
       el.innerHTML='<div class="tarif-row" style="font-weight:700;"><span>Date · mouvement</span><span>Qté · stock après</span></div>'
         + m.map(function(x){
           var q=Number(x.quantity||0);
@@ -1824,7 +1873,8 @@
     else etqLiees.forEach(function(e){
       h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(e.clientName)+'</div>'
         +'<div class="item-sub">'+fmtDate(e.createdAt)+(e.trackingNumber?' · Suivi : '+esc(e.trackingNumber):'')+' · '+e.colis+' colis</div></div>'
-        +'<button type="button" class="btn btn-ghost btn-sm" data-print-etq="'+esc(e.id)+'">🖨</button></div></div>';
+        +'<div style="display:flex;gap:4px;"><button type="button" class="btn btn-ghost btn-sm" data-print-etq="'+esc(e.id)+'">🖨</button>'
+        +'<button type="button" class="btn btn-ghost btn-sm" data-del-etq="'+esc(e.id)+'" data-mut="1" title="Supprimer" style="color:var(--danger);">🗑</button></div></div></div>';
     });
     h+='</div>';
     $("colDetail").innerHTML=h;
@@ -1834,6 +1884,15 @@
       var eid=btn.getAttribute("data-print-etq"); var etq=etiquettes.find(function(x){return String(x.id)===String(eid);});
       if(etq) btn.addEventListener("click",function(){ imprimerEtiquette(etq); });
     });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-del-etq]'), function(btn){
+      var etq=etiquettes.find(function(x){return String(x.id)===String(btn.getAttribute("data-del-etq"));});
+      if(etq) btn.addEventListener("click",function(){ supprimerEtiquette(etq); });
+    });
+  }
+  function supprimerEtiquette(etq){
+    if(!confirm("Supprimer l'étiquette d'envoi pour "+(etq.clientName||"ce client")+(etq.trackingNumber?" (suivi "+etq.trackingNumber+")":"")+" ?")) return;
+    api({action:"deleteEtiquette", id:etq.id}).then(function(){ toast("Étiquette supprimée"); refresh(); })
+      .catch(function(e){ toast("Échec : "+e.message); });
   }
   function openCarrierModal(ex){
     editingCarrierId=ex?ex.id:null;
