@@ -1264,50 +1264,58 @@
   }
   function wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat){
     var el=$(containerId);
+    el._cfg={getLignes:getLignes, setLignes:setLignes, clientIdFn:clientIdFn, modeAchat:modeAchat};
+    if(el._wired) return; // écouteurs déjà en place : on ne met à jour que la config
+    el._wired=true;
+    function prod(id){ return products.find(function(x){return String(x.id)===String(id);}); }
     el.addEventListener("change", function(e){
+      var c=el._cfg;
       var idx = e.target.getAttribute("data-idx"); if(idx==null) return; idx=Number(idx);
-      var lignes = getLignes();
+      var lignes = c.getLignes();
+      if(!lignes[idx]) return;
       if(e.target.classList.contains("ln-product")){
-        var pid=e.target.value; var p=products.find(function(x){return String(x.id)===String(pid);});
+        var pid=e.target.value; var p=prod(pid);
         lignes[idx].productId=pid;
         if(p){
           lignes[idx].designation=p.name;
           if(!lignes[idx].quantity) lignes[idx].quantity=1;
-          if(modeAchat){
+          if(c.modeAchat){
             lignes[idx].unitPrice = prixAchatParPalier(p, lignes[idx].quantity);
           } else {
-            var prixSpecial = clientIdFn ? tarifClientProduit(clientIdFn(), pid) : null;
+            var prixSpecial = c.clientIdFn ? tarifClientProduit(c.clientIdFn(), pid) : null;
             lignes[idx].unitPrice = (prixSpecial!=null) ? prixSpecial : prixParPalier(p, lignes[idx].quantity);
           }
         }
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
-        setLignes(lignes); renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat);
+        c.setLignes(lignes); renderLinesEditor(containerId, lignes);
       } else if(e.target.classList.contains("ln-desc")){
-        lignes[idx].designation=e.target.value; setLignes(lignes);
+        lignes[idx].designation=e.target.value; c.setLignes(lignes);
       } else if(e.target.classList.contains("ln-qty") || e.target.classList.contains("ln-pu")){
         if(e.target.classList.contains("ln-qty")){
           lignes[idx].quantity=Number(e.target.value||0);
-          if(lignes[idx].productId && modeAchat){
-            lignes[idx].unitPrice = prixAchatParPalier(products.find(function(x){return String(x.id)===String(lignes[idx].productId);}), lignes[idx].quantity);
-          } else if(lignes[idx].productId && !modeAchat){
-            var pRef=products.find(function(x){return String(x.id)===String(lignes[idx].productId);});
-            var prixSpecial2 = clientIdFn ? tarifClientProduit(clientIdFn(), lignes[idx].productId) : null;
-            lignes[idx].unitPrice = (prixSpecial2!=null) ? prixSpecial2 : prixParPalier(pRef, lignes[idx].quantity);
+          if(lignes[idx].productId && c.modeAchat){
+            lignes[idx].unitPrice = prixAchatParPalier(prod(lignes[idx].productId), lignes[idx].quantity);
+          } else if(lignes[idx].productId){
+            var prixSpecial2 = c.clientIdFn ? tarifClientProduit(c.clientIdFn(), lignes[idx].productId) : null;
+            var pr = (prixSpecial2!=null) ? prixSpecial2 : prixParPalier(prod(lignes[idx].productId), lignes[idx].quantity);
+            if(pr!=null) lignes[idx].unitPrice = pr;
           }
         }
         if(e.target.classList.contains("ln-pu")) lignes[idx].unitPrice=Number(e.target.value||0);
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
-        setLignes(lignes); renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat);
+        c.setLignes(lignes); renderLinesEditor(containerId, lignes);
       }
     });
     el.addEventListener("click", function(e){
       if(e.target.classList.contains("rm-btn")){
+        var c=el._cfg;
         var idx=Number(e.target.getAttribute("data-idx"));
-        var lignes=getLignes(); lignes.splice(idx,1); setLignes(lignes);
-        renderLinesEditor(containerId, lignes); wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat);
+        var lignes=c.getLignes(); lignes.splice(idx,1); c.setLignes(lignes);
+        renderLinesEditor(containerId, lignes);
       }
     });
   }
+
 
   // ===================== COMMANDES =====================
   var orderClientId=null, orderLines=[];
@@ -1424,7 +1432,7 @@
   function supprimerDocument(d, kind){
     var noms={DEVIS:"le devis",FACTURE:"la facture",AVOIR:"l'avoir",BC:"le bon de commande",BL:"le bon de livraison"};
     var msg="Supprimer "+(noms[d.type]||"le document")+" "+d.numero+" ? Cette action est définitive.";
-    if(d.type==="BL") msg+=" Le stock retiré par ce bon de livraison sera remis.";
+    if(d.type==="BL"||d.type==="FACTURE") msg+=" Le stock sera remis si la commande n'a plus ni BL ni facture.";
     if(!confirm(msg)) return;
     api({action:"deleteDocument", id:d.id}).then(function(){
       if(kind) currentId[kind]=null;
@@ -1571,7 +1579,7 @@
     api({action:"mouvementsStock", productId:p.id, limit:100}).then(function(res){
       var el=$("mvtStock"); if(!el) return;
       var m=res.mouvements||[];
-      if(!m.length){ el.innerHTML='<div class="hint">Aucun mouvement enregistré. Les réceptions d\'achats (statut « Reçu ») et les bons de livraison mettront le stock à jour automatiquement.</div>'; return; }
+      if(!m.length){ el.innerHTML='<div class="hint">Aucun mouvement enregistré. Le stock se met à jour automatiquement : + à la réception d\'un achat (statut « Reçu »), − au 1er BL ou à la 1re facture d\'une commande.</div>'; return; }
       el.innerHTML='<div class="tarif-row" style="font-weight:700;"><span>Date · mouvement</span><span>Qté · stock après</span></div>'
         + m.map(function(x){
           var q=Number(x.quantity||0);
@@ -1604,6 +1612,7 @@
   }
   function wirePriceTiersEditor(){
     var el=$("pTiersEditor");
+    if(el._wired) return; el._wired=true; // une seule fois (sinon ✕ supprimait plusieurs paliers)
     el.addEventListener("change", function(e){
       var idx=e.target.getAttribute("data-idx"); if(idx==null) return; idx=Number(idx);
       if(e.target.classList.contains("tr-qty")) productPriceTiers[idx].minQty=Number(e.target.value||0);
@@ -2019,7 +2028,7 @@
     var labels = {BC:"Bon de commande", BL:"Bon de livraison", FACTURE:"Facture"};
     btn.disabled = true; var orig = btn.textContent; btn.textContent = "Génération…";
     api({action:"genererDocument", type:type, orderId:orderId}).then(function(res){
-      toast(labels[type]+" "+res.document.numero+" créé(e)");
+      toast(res.avertissement ? "⚠ "+res.avertissement : labels[type]+" "+res.document.numero+" créé(e)");
       return refresh().then(function(){ imprimerDocument(res.document); });
     }).catch(function(e){ toast("Échec : "+e.message); })
       .then(function(){ btn.disabled=false; btn.textContent=orig; });
@@ -2161,7 +2170,8 @@
       +'.ezdoc .sign .cachet{position:absolute;right:14px;bottom:6px;height:100px;width:auto;transform:rotate(-6deg);opacity:.92;}'
       +'.ezdoc .pied{padding:0 40px 10px;font-size:10px;color:#8A919C;white-space:pre-wrap;}'
       +'.ezdoc .footer{background:#1F2B45;color:#E8EAEE;text-align:center;font-size:9.5px;line-height:1.6;padding:9px 40px;}'
-      +'.ezdoc .footer b{color:#fff;}';
+      +'.ezdoc .footer b{color:#fff;}'
+      +'@media print{.ezdoc{min-height:1110px;}}';
 
     return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>'+esc(d.numero)+'</title><style>@page{size:A4;margin:0;}html,body{margin:0;padding:0;background:#fff;}</style></head><body>'
       +'<div class="ezdoc"><style>'+css+'</style>'
