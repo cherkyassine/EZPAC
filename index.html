@@ -992,6 +992,10 @@
       var docId=btn.getAttribute("data-pdf-doc"); var doc=documents.find(function(x){return String(x.id)===String(docId);});
       if(doc) btn.addEventListener("click",function(e){ e.stopPropagation(); telechargerDocumentPDF(doc); });
     });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-del-doc]'), function(btn){
+      var docId=btn.getAttribute("data-del-doc"); var doc=documents.find(function(x){return String(x.id)===String(docId);});
+      if(doc) btn.addEventListener("click",function(e){ e.stopPropagation(); supprimerDocument(doc); });
+    });
     Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-edit-doc]'), function(btn){
       var docId=btn.getAttribute("data-edit-doc"); var doc=documents.find(function(x){return String(x.id)===String(docId);});
       if(doc) btn.addEventListener("click",function(e){ e.stopPropagation(); openDocumentEditModal(doc); });
@@ -1040,7 +1044,8 @@
         +'<button type="button" class="btn btn-ghost btn-sm" data-edit-doc="'+esc(doc.id)+'" style="padding:3px 8px;" data-mut="1">✎</button>'
         +'<button type="button" class="btn btn-ghost btn-sm" data-xls-doc="'+esc(doc.id)+'" style="padding:3px 8px;">📊</button>'
         +(doc.type==="BL"?'<button type="button" class="btn btn-ghost btn-sm" data-etq-order="'+esc(o.id)+'" data-mut="1" style="padding:3px 8px;">🏷️</button>':'')
-        +'<button type="button" class="btn btn-ghost btn-sm" data-wa-doc="'+esc(doc.id)+'" style="padding:3px 8px;color:var(--success);">💬</button></div>';
+        +'<button type="button" class="btn btn-ghost btn-sm" data-wa-doc="'+esc(doc.id)+'" style="padding:3px 8px;color:var(--success);">💬</button>'
+        +'<button type="button" class="btn btn-ghost btn-sm" data-del-doc="'+esc(doc.id)+'" data-mut="1" title="Supprimer" style="padding:3px 8px;color:var(--danger);">🗑</button></div>';
     });
     h+='<div class="item-row" style="margin-top:8px;">';
     h+='<button type="button" class="btn btn-ghost btn-sm" data-gen="BC" data-order="'+esc(o.id)+'" data-mut="1">📄 Bon de commande</button>';
@@ -1363,7 +1368,7 @@
   function renderQuoteDetail(d){
     var h='<div class="detail-inner">';
     h+='<div class="head-block"><div><h2>'+esc(d.numero)+'</h2><div class="sub">'+esc(d.clientName||"")+' · '+fmtDate(d.date)+'</div></div>';
-    h+='<div class="head-actions"><button class="icon-btn" id="editQBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="xlsQBtn" title="Exporter en Excel">📊</button><button class="icon-btn" id="pdfQBtn" title="Télécharger en PDF">⬇</button><button class="icon-btn" id="waQBtn" title="Envoyer par WhatsApp">💬</button><button class="icon-btn" id="printQBtn" title="Imprimer">🖨</button></div></div>';
+    h+='<div class="head-actions"><button class="icon-btn" id="editQBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="xlsQBtn" title="Exporter en Excel">📊</button><button class="icon-btn" id="pdfQBtn" title="Télécharger en PDF">⬇</button><button class="icon-btn" id="waQBtn" title="Envoyer par WhatsApp">💬</button><button class="icon-btn" id="printQBtn" title="Imprimer">🖨</button><button class="icon-btn" id="delQBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
     h+='<div class="info-grid">';
     h+='<div class="info-item"><div class="lbl">Total HT</div><div class="val">'+nf(d.totalHT)+' '+(d.currency||"MAD")+'</div></div>';
     h+='<div class="info-item"><div class="lbl">TVA ('+(d.tvaRate||0)+'%)</div><div class="val">'+nf(d.totalTVA)+' '+(d.currency||"MAD")+'</div></div>';
@@ -1385,6 +1390,7 @@
     $("pdfQBtn").addEventListener("click", function(){ telechargerDocumentPDF(d); });
     $("waQBtn").addEventListener("click", function(){ envoyerDocumentWhatsapp(d); });
     $("editQBtn").addEventListener("click", function(){ openDocumentEditModal(d); });
+    $("delQBtn").addEventListener("click", function(){ supprimerDocument(d, "quotes"); });
     $("xlsQBtn").addEventListener("click", function(){ exportDocumentExcel(d); });
     $("qStatut").addEventListener("change", function(){
       api({action:"updateDevisStatut", id:d.id, statutDevis:this.value}).then(function(){ toast("Statut mis à jour"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
@@ -1396,6 +1402,17 @@
         toast("Commande créée depuis le devis"); return refresh().then(function(){ openRow("clients", d.clientId); setTab("clients"); });
       }).catch(function(e){ toast("Échec : "+e.message); cb.disabled=false; cb.textContent="✅ Convertir en commande"; });
     });
+  }
+
+  function supprimerDocument(d, kind){
+    var noms={DEVIS:"le devis",FACTURE:"la facture",AVOIR:"l'avoir",BC:"le bon de commande",BL:"le bon de livraison"};
+    var msg="Supprimer "+(noms[d.type]||"le document")+" "+d.numero+" ? Cette action est définitive.";
+    if(d.type==="BL") msg+=" (Le stock retiré par ce bon de livraison ne sera pas remis automatiquement.)";
+    if(!confirm(msg)) return;
+    api({action:"deleteDocument", id:d.id}).then(function(){
+      if(kind) currentId[kind]=null;
+      toast("Document "+d.numero+" supprimé"); return refresh();
+    }).catch(function(e){ toast("Échec : "+e.message); });
   }
 
   // ===================== FACTURES =====================
@@ -1426,7 +1443,7 @@
     var j=daysSince(d.date); var enRetard = d.type==="FACTURE" && d.statutPaiement==="Non payée" && j!=null && j>30;
     var h='<div class="detail-inner">';
     h+='<div class="head-block"><div><h2>'+esc(d.numero)+(d.type==="AVOIR"?' <span class="pill pill-danger">AVOIR</span>':'')+'</h2><div class="sub">'+esc(d.clientName||"")+' · '+fmtDate(d.date)+(enRetard?' · <span style="color:var(--danger);">⚠ impayée depuis '+j+' jours</span>':'')+'</div></div>';
-    h+='<div class="head-actions"><button class="icon-btn" id="editInvBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="xlsInvBtn" title="Exporter en Excel">📊</button><button class="icon-btn" id="pdfInvBtn" title="Télécharger en PDF">⬇</button><button class="icon-btn" id="waInvBtn" title="Envoyer par WhatsApp">💬</button><button class="icon-btn" id="printInvBtn" title="Imprimer">🖨</button></div></div>';
+    h+='<div class="head-actions"><button class="icon-btn" id="editInvBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="xlsInvBtn" title="Exporter en Excel">📊</button><button class="icon-btn" id="pdfInvBtn" title="Télécharger en PDF">⬇</button><button class="icon-btn" id="waInvBtn" title="Envoyer par WhatsApp">💬</button><button class="icon-btn" id="printInvBtn" title="Imprimer">🖨</button><button class="icon-btn" id="delInvBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
     h+='<div class="info-grid">';
     h+='<div class="info-item"><div class="lbl">Total HT</div><div class="val">'+nf(d.totalHT)+' '+(d.currency||"MAD")+'</div></div>';
     h+='<div class="info-item"><div class="lbl">TVA ('+(d.tvaRate||0)+'%)</div><div class="val">'+nf(d.totalTVA)+' '+(d.currency||"MAD")+'</div></div>';
@@ -1449,6 +1466,7 @@
     $("pdfInvBtn").addEventListener("click", function(){ telechargerDocumentPDF(d); });
     $("waInvBtn").addEventListener("click", function(){ envoyerDocumentWhatsapp(d); });
     $("editInvBtn").addEventListener("click", function(){ openDocumentEditModal(d); });
+    $("delInvBtn").addEventListener("click", function(){ supprimerDocument(d, "invoices"); });
     $("xlsInvBtn").addEventListener("click", function(){ exportDocumentExcel(d); });
     var invSel=$("invStatut");
     if(invSel) invSel.addEventListener("change", function(){
