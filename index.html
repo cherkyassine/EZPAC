@@ -1222,9 +1222,9 @@
   async function handleCardFile(input, btn, label){
     var file=input.files && input.files[0]; input.value="";
     if(!file) return;
-    btn.disabled=true; btn.textContent="Lecture…"; $("scanStatus").textContent="Lecture de la carte en cours (quelques secondes)…"; $("scanRawWrap").style.display="none";
+    btn.disabled=true; btn.textContent="Lecture…"; $("scanStatus").textContent="Lecture de la carte par Google (quelques secondes)…"; $("scanRawWrap").style.display="none";
     try{
-      var img=await imageReduite(file, 1600);
+      var img=await imageReduite(file, 2000);
       var res=await api({action:"scanCard", mimeType:img.mime, data:img.data});
       if(!res.champs){ $("scanStatus").textContent=res.message||"Aucun texte lisible sur cette image."; }
       else{
