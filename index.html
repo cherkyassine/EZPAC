@@ -1352,6 +1352,10 @@
     var q=($("searchInput").value||"").toLowerCase().trim();
     var list=documents.filter(function(d){return d.type==="DEVIS";}).filter(function(d){
       if(!q) return true; return [d.numero,d.clientName].some(function(v){return v&&String(v).toLowerCase().indexOf(q)!==-1;});
+    }).sort(function(a,b){ // demandes web d'abord, puis du plus récent au plus ancien
+      var wa=a.statutDevis==="Demande web"?1:0, wb=b.statutDevis==="Demande web"?1:0;
+      if(wa!==wb) return wb-wa;
+      return String(b.createdAt||b.date||"").localeCompare(String(a.createdAt||a.date||""));
     });
     var el=$("listScroll");
     if(!list.length){ el.innerHTML='<div class="empty-hint">'+(documents.some(function(d){return d.type==="DEVIS";})?"Aucun devis ne correspond.":"Aucun devis pour l'instant.<br>Créez-en un depuis la fiche d'un client.")+'</div>'; return; }
