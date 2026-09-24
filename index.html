@@ -9,7 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root{
     --paper:#F5F4F0; --paper-raised:#FFFFFF; --ink:#1B1E24; --ink-soft:#5B6470; --ink-faint:#9AA1AA;
@@ -397,6 +398,12 @@
       <div id="pTiersEditor"></div>
       <button type="button" class="btn btn-ghost btn-sm" id="pAddTier">+ Ajouter un palier</button>
       <div class="hint" style="margin-top:6px;">Ex : à partir de 500 pièces → 2,20 MAD ; à partir de 1000 → 2,00 MAD. Le prix unitaire ci-dessus reste le prix de base (petites quantités).</div>
+    </div>
+    <div class="field">
+      <label>Paliers de prix d'achat fournisseur (optionnel)</label>
+      <div id="pAchTiersEditor"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="pAddAchTier">+ Ajouter un palier d'achat</button>
+      <div class="hint" style="margin-top:6px;">Ex : à partir de 1000 pièces → 0,80 MAD ; à partir de 5000 → 0,65 MAD. Le prix d'achat ci-dessus reste le prix de base. Utilisé automatiquement dans les achats fournisseur.</div>
     </div>
     <div class="field"><label>Notes</label><textarea id="pNotes" placeholder="Détails complémentaires…"></textarea></div>
     <div class="modal-actions">
@@ -1267,7 +1274,7 @@
           lignes[idx].designation=p.name;
           if(!lignes[idx].quantity) lignes[idx].quantity=1;
           if(modeAchat){
-            lignes[idx].unitPrice = (p.purchasePrice!=null && p.purchasePrice!=="") ? Number(p.purchasePrice) : Number(p.unitPrice||0);
+            lignes[idx].unitPrice = prixAchatParPalier(p, lignes[idx].quantity);
           } else {
             var prixSpecial = clientIdFn ? tarifClientProduit(clientIdFn(), pid) : null;
             lignes[idx].unitPrice = (prixSpecial!=null) ? prixSpecial : prixParPalier(p, lignes[idx].quantity);
@@ -1280,7 +1287,9 @@
       } else if(e.target.classList.contains("ln-qty") || e.target.classList.contains("ln-pu")){
         if(e.target.classList.contains("ln-qty")){
           lignes[idx].quantity=Number(e.target.value||0);
-          if(lignes[idx].productId && !modeAchat){
+          if(lignes[idx].productId && modeAchat){
+            lignes[idx].unitPrice = prixAchatParPalier(products.find(function(x){return String(x.id)===String(lignes[idx].productId);}), lignes[idx].quantity);
+          } else if(lignes[idx].productId && !modeAchat){
             var pRef=products.find(function(x){return String(x.id)===String(lignes[idx].productId);});
             var prixSpecial2 = clientIdFn ? tarifClientProduit(clientIdFn(), lignes[idx].productId) : null;
             lignes[idx].unitPrice = (prixSpecial2!=null) ? prixSpecial2 : prixParPalier(pRef, lignes[idx].quantity);
@@ -1415,7 +1424,7 @@
   function supprimerDocument(d, kind){
     var noms={DEVIS:"le devis",FACTURE:"la facture",AVOIR:"l'avoir",BC:"le bon de commande",BL:"le bon de livraison"};
     var msg="Supprimer "+(noms[d.type]||"le document")+" "+d.numero+" ? Cette action est définitive.";
-    if(d.type==="BL") msg+=" (Le stock retiré par ce bon de livraison ne sera pas remis automatiquement.)";
+    if(d.type==="BL") msg+=" Le stock retiré par ce bon de livraison sera remis.";
     if(!confirm(msg)) return;
     api({action:"deleteDocument", id:d.id}).then(function(){
       if(kind) currentId[kind]=null;
@@ -1540,12 +1549,47 @@
         h+='<div class="tarif-row"><span>À partir de '+t.minQty+'</span><span>'+nf(t.unitPrice)+' '+(p.currency||"MAD")+'</span></div>';
       });
     }
+    if(p.purchaseTiers && p.purchaseTiers.length){
+      h+='<div class="section-head"><h3>Paliers d\'achat fournisseur</h3></div>';
+      h+='<div class="tarif-row" style="font-weight:700;"><span>Quantité</span><span>'+((p.purchasePrice!=null&&p.purchasePrice!=="")?nf(p.purchasePrice)+' '+(p.currency||"MAD")+' (base)':'—')+'</span></div>';
+      p.purchaseTiers.slice().sort(function(a,b){return a.minQty-b.minQty;}).forEach(function(t){
+        h+='<div class="tarif-row"><span>À partir de '+t.minQty+'</span><span>'+nf(t.unitPrice)+' '+(p.currency||"MAD")+'</span></div>';
+      });
+    }
     if(p.notes) h+='<div class="notes-block">'+esc(p.notes)+'</div>';
+    h+='<div class="section-head"><h3>Suivi du stock</h3><button class="btn btn-ghost btn-sm" id="ajusterStockBtn" data-mut="1">± Ajuster (inventaire)</button></div>';
+    h+='<div id="mvtStock"><div class="hint">Chargement…</div></div>';
     h+='</div>';
     $("colDetail").innerHTML=h;
+    chargerMouvementsStock(p);
+    $("ajusterStockBtn").addEventListener("click", function(){ ajusterStockProduit(p); });
     $("editProductBtn").addEventListener("click",function(){ openProductModal(p); });
     $("duplicateProductBtn").addEventListener("click",function(){ openProductModal(p, true); });
     $("deleteProductBtn").addEventListener("click",function(){ deleteProduct(p); });
+  }
+  function chargerMouvementsStock(p){
+    api({action:"mouvementsStock", productId:p.id, limit:100}).then(function(res){
+      var el=$("mvtStock"); if(!el) return;
+      var m=res.mouvements||[];
+      if(!m.length){ el.innerHTML='<div class="hint">Aucun mouvement enregistré. Les réceptions d\'achats (statut « Reçu ») et les bons de livraison mettront le stock à jour automatiquement.</div>'; return; }
+      el.innerHTML='<div class="tarif-row" style="font-weight:700;"><span>Date · mouvement</span><span>Qté · stock après</span></div>'
+        + m.map(function(x){
+          var q=Number(x.quantity||0);
+          return '<div class="tarif-row"><span>'+fmtDate(x.createdAt)+' · '+esc(x.type||"")+(x.refNumero?' <strong>'+esc(x.refNumero)+'</strong>':'')+(x.notes?' <span class="hint">('+esc(x.notes)+')</span>':'')+'</span>'
+            +'<span><strong style="color:'+(q>=0?'var(--success)':'var(--danger)')+';">'+(q>0?'+':'')+nf(q)+'</strong> → '+nf(x.stockAfter)+'</span></div>';
+        }).join("");
+    }).catch(function(e){ var el=$("mvtStock"); if(el) el.innerHTML='<div class="hint" style="color:var(--danger);">'+esc(e.message)+'</div>'; });
+  }
+  function ajusterStockProduit(p){
+    var actuel = (p.stock!=null && p.stock!=="") ? Number(p.stock) : 0;
+    var v = prompt("Stock compté pour « "+p.name+" » (stock actuel : "+actuel+") :", actuel);
+    if(v===null) return;
+    v = String(v).replace(",",".").trim();
+    if(v==="" || isNaN(Number(v))){ toast("Quantité invalide"); return; }
+    var note = prompt("Motif (optionnel) :", "Inventaire");
+    api({action:"ajusterStock", productId:p.id, nouveauStock:Number(v), notes:note||"Inventaire"}).then(function(res){
+      toast("Stock mis à jour : "+nf(res.stock)); return refresh();
+    }).catch(function(e){ toast("Échec : "+e.message); });
   }
   var productPriceTiers=[];
   function renderPriceTiersEditor(){
@@ -1574,6 +1618,35 @@
   }
   $("pAddTier").addEventListener("click", function(){ productPriceTiers.push({minQty:"",unitPrice:""}); renderPriceTiersEditor(); });
 
+  // Paliers d'achat fournisseur (même principe que les paliers de vente)
+  var productAchatTiers=[];
+  function renderAchatTiersEditor(){
+    var el=$("pAchTiersEditor");
+    if(!productAchatTiers.length){ el.innerHTML='<div class="hint" style="padding:4px 0;">Aucun palier — le prix d\'achat de base s\'applique quelle que soit la quantité.</div>'; return; }
+    el.innerHTML = productAchatTiers.map(function(t,idx){
+      return '<div class="tier-row">'
+        +'<input class="tra-qty" type="number" step="1" min="1" data-idx="'+idx+'" placeholder="À partir de (qté)" value="'+(t.minQty||"")+'">'
+        +'<input class="tra-price" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="Prix d\'achat unitaire" value="'+(t.unitPrice||"")+'">'
+        +'<button type="button" class="rm-btn" data-idx="'+idx+'">✕</button></div>';
+    }).join("");
+  }
+  $("pAchTiersEditor").addEventListener("change", function(e){
+    var idx=e.target.getAttribute("data-idx"); if(idx==null) return; idx=Number(idx);
+    if(e.target.classList.contains("tra-qty")) productAchatTiers[idx].minQty=Number(e.target.value||0);
+    if(e.target.classList.contains("tra-price")) productAchatTiers[idx].unitPrice=Number(e.target.value||0);
+  });
+  $("pAchTiersEditor").addEventListener("click", function(e){
+    if(e.target.classList.contains("rm-btn")){ productAchatTiers.splice(Number(e.target.getAttribute("data-idx")),1); renderAchatTiersEditor(); }
+  });
+  $("pAddAchTier").addEventListener("click", function(){ productAchatTiers.push({minQty:"",unitPrice:""}); renderAchatTiersEditor(); });
+  function prixAchatParPalier(p, qty){
+    if(!p) return 0;
+    var prix = (p.purchasePrice!=null && p.purchasePrice!=="") ? Number(p.purchasePrice) : Number(p.unitPrice||0);
+    (p.purchaseTiers||[]).slice().sort(function(a,b){return Number(a.minQty)-Number(b.minQty);})
+      .forEach(function(t){ if(Number(qty)>=Number(t.minQty)) prix=Number(t.unitPrice); });
+    return prix;
+  }
+
   function openProductModal(ex, dupliquer){
     editingProductId=(ex && !dupliquer)?ex.id:null;
     $("productModalTitle").textContent = dupliquer ? "Nouveau produit (à partir de « "+ex.name+" »)" : (ex?"Modifier le produit":"Nouveau produit");
@@ -1589,6 +1662,8 @@
     sel.value = ex && ex.fournisseurId ? ex.fournisseurId : "";
     productPriceTiers = (ex && ex.priceTiers) ? ex.priceTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
     renderPriceTiersEditor(); wirePriceTiersEditor();
+    productAchatTiers = (ex && ex.purchaseTiers) ? ex.purchaseTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
+    renderAchatTiersEditor();
     $("productOverlay").classList.add("open");
     setTimeout(function(){ $("pName").focus(); if(dupliquer) $("pName").select(); },50);
   }
@@ -1604,7 +1679,8 @@
       purchasePrice:$("pPurchasePrice").value?Number($("pPurchasePrice").value):null,
       currency:$("pCurrency").value, stock:$("pStock").value!==""?Number($("pStock").value):null,
       seuilAlerte:$("pSeuil").value!==""?Number($("pSeuil").value):null, fournisseurId:fid, fournisseurName: fs?fs.name:"",
-      priceTiers: tiersValides, notes:$("pNotes").value.trim() };
+      priceTiers: tiersValides, notes:$("pNotes").value.trim(),
+      purchaseTiers: productAchatTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }) };
     var btn=$("saveProductBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
     api({action:"saveProduct",product:p}).then(function(res){
       $("productOverlay").classList.remove("open"); toast(editingProductId?"Produit mis à jour":"Produit créé");
@@ -1889,7 +1965,7 @@
     });
     var sel=$("ast-"+a.id);
     if(sel){ sel.addEventListener("click",function(e){e.stopPropagation();});
-      sel.addEventListener("change",function(){ api({action:"updateAchatStatut", id:a.id, status:this.value}).then(function(){ toast("Statut mis à jour"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); }); }); }
+      sel.addEventListener("change",function(){ api({action:"updateAchatStatut", id:a.id, status:this.value}).then(function(){ toast(sel.value==="Reçu"?"Achat reçu : stock mis à jour":"Statut mis à jour"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); }); }); }
     var pay=$("apay-"+a.id);
     if(pay){ pay.addEventListener("click",function(e){e.stopPropagation();});
       pay.addEventListener("change",function(){ var v=this.value; api({action:"updateAchatPaiement", id:a.id, statutPaiement:v, datePaiement: v==="Payé"?new Date().toISOString():""}).then(function(){ toast("Statut mis à jour"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); }); }); }
@@ -1966,56 +2042,148 @@
     if(!phone){ toast("Ce client n'a pas de numéro de téléphone enregistré"); return; }
     openWhatsapp(phone, messageDocumentWhatsapp(d));
   }
+  // ---------- Montant en lettres (dirhams) ----------
+  function nombreEnLettres(n){
+    var U=["zéro","un","deux","trois","quatre","cinq","six","sept","huit","neuf","dix","onze","douze","treize","quatorze","quinze","seize"];
+    var D=["","dix","vingt","trente","quarante","cinquante","soixante"];
+    function moins100(x){
+      if(x<17) return U[x];
+      if(x<20) return "dix-"+U[x-10];
+      var t=Math.floor(x/10), u=x%10;
+      if(t===7||t===9) return (t===7?"soixante":"quatre-vingt")+(t===7&&u===1?" et ":"-")+moins100(10+u);
+      if(t===8) return "quatre-vingt"+(u?"-"+U[u]:"s");
+      return D[t]+(u===1?" et un":(u?"-"+U[u]:""));
+    }
+    function moins1000(x){
+      var h=Math.floor(x/100), r=x%100;
+      if(!h) return moins100(r);
+      var s=(h===1?"cent":U[h]+" cent");
+      if(!r && h>1) s+="s";
+      return s+(r?" "+moins100(r):"");
+    }
+    n=Math.floor(Math.abs(n));
+    if(n===0) return "zéro";
+    var mil=Math.floor(n/1000000), k=Math.floor((n%1000000)/1000), r=n%1000, out=[];
+    if(mil) out.push(moins1000(mil)+" million"+(mil>1?"s":""));
+    if(k) out.push(k===1?"mille":moins1000(k).replace(/s$/,"")+" mille");
+    if(r) out.push(moins1000(r));
+    return out.join(" ");
+  }
+  function montantEnLettres(v, devise){
+    var n=Math.round(Math.abs(Number(v||0))*100), entier=Math.floor(n/100), cts=n%100;
+    var unite=(devise&&devise!=="MAD")?devise:"dirham"+(entier>1?"s":"");
+    var s=nombreEnLettres(entier)+(entier>=1000000&&entier%1000000===0?" de ":" ")+unite;
+    if(cts) s+=" et "+nombreEnLettres(cts)+" centime"+(cts>1?"s":"");
+    return s.charAt(0).toUpperCase()+s.slice(1);
+  }
+  function mt(n){ return Number(n||0).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}).replace(/ | /g," "); }
+  function dateDoc(iso){ try{ var d=new Date(iso); return isNaN(d)?String(iso||""):d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}); }catch(e){ return String(iso||""); } }
+
+  // ---------- Modèle des documents (devis, BC, BL, facture, avoir) ----------
+  // Tous les styles sont préfixés par .ezdoc et placés DANS le body : ils restent appliqués
+  // à l'impression comme au téléchargement PDF (la capture PDF part de .ezdoc).
   function genererHtmlDocument(d){
-    var titres={BC:"BON DE COMMANDE", BL:"BON DE LIVRAISON", FACTURE:"FACTURE", DEVIS:"DEVIS", AVOIR:"AVOIR", BCF:"BON DE COMMANDE FOURNISSEUR"};
-    var s=invoiceSettings;
-    var lignesHtml=(d.lines||[]).map(function(l){
-      return '<tr><td>'+esc(l.designation)+'</td><td style="text-align:center;">'+esc(l.quantity!=null?l.quantity:l.quantite)+'</td>'
-        +'<td style="text-align:right;">'+nf(l.unitPrice!=null?l.unitPrice:l.prixUnitaire)+'</td><td style="text-align:right;">'+nf(l.total)+'</td></tr>';
+    var titres={BC:"Bon de commande", BL:"Bon de livraison", FACTURE:"Facture", DEVIS:"Devis", AVOIR:"Avoir", BCF:"Bon de commande fournisseur"};
+    var s=invoiceSettings||{}, dev=d.currency||"MAD", lignes=d.lines||[];
+    var avecPrix = d.type!=="BL";
+    // Les lignes sont-elles saisies TTC (règle actuelle) ou HT (anciens documents) ?
+    var somme = lignes.reduce(function(a,l){ return a+Number(l.total||0); },0);
+    var lignesTTC = Math.abs(somme-Number(d.totalTTC||0)) < 0.05 && Number(d.totalTVA||0)!==0;
+    var suf = lignesTTC ? " TTC" : " HT";
+    var qteTotale = lignes.reduce(function(a,l){ return a+Number(l.quantity!=null?l.quantity:(l.quantite||0)); },0);
+
+    var lignesHtml = lignes.map(function(l,i){
+      var q = l.quantity!=null?l.quantity:l.quantite, pu = l.unitPrice!=null?l.unitPrice:l.prixUnitaire;
+      return '<tr><td class="c">'+(i+1)+'</td><td>'+esc(l.designation)+'</td><td class="c">'+esc(q)+'</td>'
+        +(avecPrix?'<td class="r">'+mt(pu)+'</td><td class="r b">'+mt(l.total)+'</td>':'')+'</tr>';
     }).join("");
-    var mentionsLegales = 'SARL CAPITAL: '+esc(s.capitalSocial||'')+' - TP: '+esc(s.patente||'')+' - RC: '+esc(s.rc||'')
-      +' - IF: '+esc(s.ifiscal||'')+'–ICE: '+esc(s.ice||'')+'- CNSS: '+esc(s.cnss||'');
-    var mentionsRib = s.rib ? ('CIH BANK RIB : '+esc(s.rib)) : '';
-    return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>'+esc(d.numero)+'</title><style>'
-      +'body{font-family:Arial,sans-serif;color:#1B1E24;padding:0;max-width:800px;margin:0 auto;}'
-      +'.page{padding:30px 36px 0;}'
-      +'.hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1F2B45;padding-bottom:14px;margin-bottom:22px;}'
-      +'.hdr img{height:64px;width:auto;display:block;}'
-      +'.hdr .infos{font-size:11.5px;color:#333;line-height:1.6;text-align:right;}'
-      +'.hdr .infos .email{color:#1F2B45;font-weight:700;}'
-      +'.doctitle{text-align:center;margin-bottom:22px;}'
-      +'.doctitle h2{margin:0;font-size:20px;letter-spacing:.08em;color:#1F2B45;background:#F0EFEA;display:inline-block;padding:8px 26px;border-radius:6px;}'
-      +'.doctitle .num{font-size:12.5px;color:#5B6470;margin-top:6px;}'
-      +'.client-box{background:#F5F4F0;border-radius:8px;padding:14px 16px;margin-bottom:22px;font-size:13px;}'
-      +'.client-box strong{display:block;font-size:14.5px;margin-bottom:4px;}'
-      +'table{width:100%;border-collapse:collapse;margin-bottom:20px;}'
-      +'th{background:#1F2B45;color:#fff;font-size:11.5px;text-align:left;padding:8px 10px;}'
-      +'td{padding:8px 10px;border-bottom:1px solid #E2E0DA;font-size:13px;}'
-      +'.totaux{margin-left:auto;width:260px;font-size:13.5px;}'
-      +'.totaux div{display:flex;justify-content:space-between;padding:4px 0;}'
-      +'.totaux .ttc{border-top:2px solid #1F2B45;font-weight:700;font-size:15px;padding-top:8px;margin-top:4px;}'
-      +'.sign{display:flex;justify-content:space-between;margin-top:60px;margin-bottom:40px;font-size:12px;color:#5B6470;}'
-      +'.sign .box{width:220px;border-top:1px solid #9AA1AA;padding-top:6px;text-align:center;position:relative;}'
-      +'.sign .box .cachet-img{position:absolute;left:50%;bottom:14px;transform:translateX(-50%) rotate(-6deg);height:110px;width:auto;opacity:.92;}'
-      +'.footer-band{background:linear-gradient(100deg,#FBE7E4 0%,#F8F6D2 35%,#CFE9F5 70%,#CDEEFC 100%);padding:10px 36px;text-align:center;font-size:10.5px;font-weight:700;color:#2A2A2A;line-height:1.6;}'
-      +'@media print{ .footer-band{position:fixed;bottom:0;left:0;right:0;} body{padding-bottom:50px;} }'
-      +'</style></head><body><div class="page">'
+
+    var destLabel = d.type==="BCF" ? "Fournisseur" : (d.type==="FACTURE"||d.type==="AVOIR" ? "Facturé à" : (d.type==="BL" ? "Livré à" : "Client"));
+    var infosDoc = '<div class="meta"><div><span>N°</span><b>'+esc(d.numero)+'</b></div><div><span>Date</span><b>'+dateDoc(d.date)+'</b></div>'
+      +(d.type==="DEVIS"?'<div><span>Validité</span><b>30 jours</b></div>':'')
+      +(d.type==="AVOIR"&&d.notes?'<div><span>Réf.</span><b>'+esc(d.notes)+'</b></div>':'')
+      +'</div>';
+
+    var totaux = !avecPrix ? '<div class="totaux"><div class="ttc"><span>Quantité totale</span><span>'+nf(qteTotale)+'</span></div></div>'
+      : '<div class="totaux">'
+        +'<div><span>Total HT</span><span>'+mt(d.totalHT)+' '+dev+'</span></div>'
+        +'<div><span>TVA '+(d.tvaRate||0)+' %</span><span>'+mt(d.totalTVA)+' '+dev+'</span></div>'
+        +'<div class="ttc"><span>Total TTC</span><span>'+mt(d.totalTTC)+' '+dev+'</span></div></div>';
+    var phrases = {FACTURE:"Arrêtée la présente facture à la somme de", DEVIS:"Arrêté le présent devis à la somme de", AVOIR:"Arrêté le présent avoir à la somme de", BC:"Arrêté le présent bon de commande à la somme de", BCF:"Arrêté le présent bon de commande à la somme de"};
+    var enLettres = avecPrix && phrases[d.type] ? '<div class="lettres">'+phrases[d.type]+' : <b>'+montantEnLettres(d.totalTTC, dev)+' TTC</b></div>' : '';
+
+    var conditions = d.type==="DEVIS" ? '<div class="cond"><b>Conditions :</b> devis valable 30 jours · délai de fabrication confirmé à la commande · prix'+(lignesTTC?' TTC':' HT')+' en '+dev+'.</div>' : '';
+    var signGauche = d.type==="DEVIS" ? "Bon pour accord (date, cachet et signature du client)" : (d.type==="BL" ? "Reçu par (nom, date et signature)" : "Signature client");
+    var cachet = (d.type==="FACTURE") ? '<img class="cachet" src="'+CACHET_DATA_URI+'" alt="">' : '';
+
+    var mentions = 'SARL au capital de '+esc(s.capitalSocial||'')+' · RC : '+esc(s.rc||'')+' · IF : '+esc(s.ifiscal||'')
+      +' · TP : '+esc(s.patente||'')+' · ICE : '+esc(s.ice||'')+' · CNSS : '+esc(s.cnss||'');
+    var rib = s.rib ? 'RIB (CIH Bank) : '+esc(s.rib) : '';
+
+    var css = ''
+      +'@page{size:A4;margin:0;}'
+            +'.ezdoc{box-sizing:border-box;width:794px;min-height:1122px;margin:0 auto;display:flex;flex-direction:column;font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:#1B1E24;font-size:12.5px;line-height:1.45;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.ezdoc *{box-sizing:border-box;}'
+      +'.ezdoc .accent{height:6px;background:linear-gradient(90deg,#E4202C 0 25%,#F29100 25% 50%,#00A3C7 50% 75%,#1F2B45 75% 100%);}'
+      +'.ezdoc .corps{flex:1;padding:26px 40px 10px;}'
+      +'.ezdoc .hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;}'
+      +'.ezdoc .hdr img{height:70px;width:auto;max-width:230px;object-fit:contain;display:block;}'
+      +'.ezdoc .soc{text-align:right;font-size:11px;color:#4A5260;line-height:1.55;}'
+      +'.ezdoc .soc b{color:#1F2B45;font-size:12.5px;}'
+      +'.ezdoc .titre{display:flex;justify-content:space-between;align-items:flex-end;margin:26px 0 18px;padding-bottom:12px;border-bottom:2px solid #1F2B45;}'
+      +'.ezdoc h1{margin:0;font-size:26px;letter-spacing:.06em;text-transform:uppercase;color:#1F2B45;font-weight:800;}'
+      +'.ezdoc .meta{display:flex;gap:18px;}'
+      +'.ezdoc .meta div{display:flex;flex-direction:column;align-items:flex-end;}'
+      +'.ezdoc .meta span{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#8A919C;}'
+      +'.ezdoc .meta b{font-size:13px;color:#1B1E24;}'
+      +'.ezdoc .parties{display:flex;justify-content:flex-end;margin-bottom:20px;}'
+      +'.ezdoc .dest{width:55%;border:1px solid #E2E0DA;border-left:4px solid #E4202C;border-radius:6px;padding:12px 14px;background:#FAFAF8;}'
+      +'.ezdoc .dest .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#8A919C;margin-bottom:4px;}'
+      +'.ezdoc .dest .nom{font-size:14px;font-weight:700;color:#1F2B45;margin-bottom:3px;}'
+      +'.ezdoc .dest .l{font-size:11.5px;color:#4A5260;}'
+      +'.ezdoc table{width:100%;border-collapse:collapse;margin-bottom:14px;}'
+      +'.ezdoc thead th{background:#1F2B45;color:#fff;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;padding:9px 10px;text-align:left;font-weight:600;}'
+      +'.ezdoc tbody td{padding:9px 10px;border-bottom:1px solid #E8E6E0;vertical-align:top;}'
+      +'.ezdoc tbody tr:nth-child(even) td{background:#F7F6F2;}'
+      +'.ezdoc tr{page-break-inside:avoid;}'
+      +'.ezdoc .c{text-align:center;white-space:nowrap;} .ezdoc .r{text-align:right;white-space:nowrap;} .ezdoc .b{font-weight:600;}'
+      +'.ezdoc .bas{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;}'
+      +'.ezdoc .bas .g{flex:1;}'
+      +'.ezdoc .totaux{width:280px;border:1px solid #E2E0DA;border-radius:6px;overflow:hidden;}'
+      +'.ezdoc .totaux div{display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #EFEDE8;}'
+      +'.ezdoc .totaux .ttc{background:#1F2B45;color:#fff;font-weight:700;font-size:14px;border-bottom:0;}'
+      +'.ezdoc .lettres{font-size:11.5px;color:#4A5260;margin-top:2px;}'
+      +'.ezdoc .lettres b{color:#1B1E24;}'
+      +'.ezdoc .cond{margin-top:10px;font-size:11px;color:#4A5260;}'
+      +'.ezdoc .notes{margin-top:10px;font-size:11px;color:#4A5260;white-space:pre-wrap;}'
+      +'.ezdoc .sign{display:flex;justify-content:space-between;gap:40px;margin-top:34px;}'
+      +'.ezdoc .sign .box{flex:1;max-width:280px;height:120px;border:1px dashed #B9BEC6;border-radius:6px;padding:8px 10px;font-size:10.5px;color:#6B7380;position:relative;}'
+      +'.ezdoc .sign .cachet{position:absolute;right:14px;bottom:6px;height:100px;width:auto;transform:rotate(-6deg);opacity:.92;}'
+      +'.ezdoc .pied{padding:0 40px 10px;font-size:10px;color:#8A919C;white-space:pre-wrap;}'
+      +'.ezdoc .footer{background:#1F2B45;color:#E8EAEE;text-align:center;font-size:9.5px;line-height:1.6;padding:9px 40px;}'
+      +'.ezdoc .footer b{color:#fff;}';
+
+    return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>'+esc(d.numero)+'</title><style>@page{size:A4;margin:0;}html,body{margin:0;padding:0;background:#fff;}</style></head><body>'
+      +'<div class="ezdoc"><style>'+css+'</style>'
+      +'<div class="accent"></div><div class="corps">'
       +'<div class="hdr"><img src="'+LOGO_DATA_URI+'" alt="'+esc(s.raisonSociale||'')+'" onerror="this.style.display=\'none\'">'
-      +'<div class="infos">'+(s.adresse?esc(s.adresse)+'<br>':'')
-      +(s.telephone?'Tél.: '+esc(s.telephone)+'<br>':'')
-      +(s.email?'<span class="email">Email : '+esc(s.email)+'</span> ':'')+(s.siteWeb?' Site Web : '+esc(s.siteWeb):'')
-      +'</div></div>'
-      +'<div class="doctitle"><h2>'+titres[d.type]+'</h2><div class="num">N° '+esc(d.numero)+' &nbsp;·&nbsp; Date : '+fmtDate(d.date)+'</div></div>'
-      +'<div class="client-box"><strong>'+esc(d.clientName||"")+'</strong>'+(d.clientAddress?esc(d.clientAddress)+'<br>':'')
-      +(d.clientPhone?'Tél : '+esc(d.clientPhone)+' ':'')+(d.clientIce?'· ICE : '+esc(d.clientIce):'')+'</div>'
-      +'<table><thead><tr><th>Désignation</th><th style="text-align:center;">Qté</th><th style="text-align:right;">P.U.</th><th style="text-align:right;">Total</th></tr></thead><tbody>'+lignesHtml+'</tbody></table>'
-      +'<div class="totaux"><div><span>Total HT</span><span>'+nf(d.totalHT)+' '+(d.currency||"MAD")+'</span></div>'
-      +'<div><span>TVA ('+(d.tvaRate||0)+'%)</span><span>'+nf(d.totalTVA)+' '+(d.currency||"MAD")+'</span></div>'
-      +'<div class="ttc"><span>Total TTC</span><span>'+nf(d.totalTTC)+' '+(d.currency||"MAD")+'</span></div></div>'
-      +'<div class="sign"><div class="box">Signature client</div><div class="box">'+(d.type==="FACTURE"?'<img class="cachet-img" src="'+CACHET_DATA_URI+'" alt="Cachet">':'')+'Cachet &amp; signature</div></div>'
-      +(s.piedPage?'<div class="hint" style="font-size:10.5px;color:#9AA1AA;margin-bottom:16px;white-space:pre-wrap;">'+esc(s.piedPage)+'</div>':'')
-      +'</div><div class="footer-band">'+mentionsLegales+(mentionsRib?'<br>'+mentionsRib:'')+'</div>'
-      +'</body></html>';
+      +'<div class="soc"><b>'+esc(s.raisonSociale||'')+'</b><br>'+(s.adresse?esc(s.adresse)+'<br>':'')
+      +(s.telephone?'Tél. : '+esc(s.telephone)+'<br>':'')
+      +(s.email?esc(s.email):'')+(s.siteWeb?' · '+esc(s.siteWeb):'')+(s.ice?'<br>ICE : '+esc(s.ice):'')+'</div></div>'
+      +'<div class="titre"><h1>'+esc(titres[d.type]||d.type)+'</h1>'+infosDoc+'</div>'
+      +'<div class="parties"><div class="dest"><div class="lbl">'+destLabel+'</div><div class="nom">'+esc(d.clientName||"")+'</div>'
+      +(d.clientAddress?'<div class="l">'+esc(d.clientAddress)+'</div>':'')
+      +(d.clientPhone?'<div class="l">Tél. : '+esc(d.clientPhone)+'</div>':'')
+      +(d.clientIce?'<div class="l">ICE : '+esc(d.clientIce)+'</div>':'')+'</div></div>'
+      +'<table><thead><tr><th class="c" style="width:34px;">#</th><th>Désignation</th><th class="c" style="width:70px;">Qté</th>'
+      +(avecPrix?'<th class="r" style="width:110px;">P.U.'+suf+'</th><th class="r" style="width:120px;">Montant'+suf+'</th>':'')+'</tr></thead>'
+      +'<tbody>'+lignesHtml+'</tbody></table>'
+      +'<div class="bas"><div class="g">'+enLettres+conditions+'</div>'+totaux+'</div>'
+      +'<div class="sign"><div class="box">'+signGauche+'</div><div class="box">Cachet et signature '+esc(s.raisonSociale||'')+cachet+'</div></div>'
+      +'</div>'
+      +(s.piedPage?'<div class="pied">'+esc(s.piedPage)+'</div>':'')
+      +'<div class="footer">'+mentions+(rib?'<br><b>'+rib+'</b>':'')+'</div>'
+      +'</div></body></html>';
   }
   function imprimerDocument(d){
     var html = genererHtmlDocument(d);
@@ -2024,18 +2192,43 @@
     w.document.open(); w.document.write(html); w.document.close();
     setTimeout(function(){ w.focus(); w.print(); },300);
   }
+  // PDF A4 : capture directe du document (html2canvas) puis découpe en pages entre les lignes du tableau
   function telechargerPdfDepuisHtml(html, filename){
-    if(typeof html2pdf === "undefined"){ toast("Téléchargement PDF indisponible (bibliothèque non chargée)"); return; }
+    if(typeof html2canvas === "undefined" || !window.jspdf){ toast("Téléchargement PDF indisponible (bibliothèque non chargée)"); return; }
+    var LARGEUR=794, HAUTEUR=1123, ECHELLE=2;
     var iframe=document.createElement("iframe");
-    iframe.style.position="fixed"; iframe.style.left="-9999px"; iframe.style.top="0"; iframe.style.width="800px"; iframe.style.height="1200px";
+    iframe.style.cssText="position:fixed;left:-9999px;top:0;width:"+LARGEUR+"px;height:"+HAUTEUR+"px;border:0;";
     document.body.appendChild(iframe);
-    iframe.contentDocument.open(); iframe.contentDocument.write(html); iframe.contentDocument.close();
+    var idoc=iframe.contentDocument;
+    idoc.open(); idoc.write(html); idoc.close();
     toast("Génération du PDF…");
+    function fin(){ if(iframe.parentNode) iframe.parentNode.removeChild(iframe); }
     setTimeout(function(){
-      html2pdf().set({ margin:0, filename:filename, image:{type:"jpeg",quality:0.95}, html2canvas:{scale:2, useCORS:true}, jsPDF:{unit:"pt",format:"a4",orientation:"portrait"} })
-        .from(iframe.contentDocument.body).save().then(function(){ document.body.removeChild(iframe); })
-        .catch(function(){ toast("Échec de la génération du PDF"); document.body.removeChild(iframe); });
-    }, 350);
+      var cible = idoc.body.querySelector(".ezdoc") || idoc.body;
+      if(cible===idoc.body) idoc.body.style.width=LARGEUR+"px";
+      // bas de chaque ligne de tableau : points de coupe possibles entre deux pages
+      var haut=cible.getBoundingClientRect().top;
+      var coupes=Array.prototype.map.call(cible.querySelectorAll("tr, .bas, .sign"), function(el){ return (el.getBoundingClientRect().bottom-haut)*ECHELLE; });
+      html2canvas(cible, {scale:ECHELLE, useCORS:true, backgroundColor:"#ffffff", windowWidth:LARGEUR}).then(function(canvas){
+        var pdf=new window.jspdf.jsPDF({unit:"px", format:[LARGEUR,HAUTEUR], orientation:"portrait", hotfixes:["px_scaling"]});
+        var pageH=HAUTEUR*ECHELLE, y=0, premiere=true;
+        while(y < canvas.height-2){
+          var fin_=Math.min(y+pageH, canvas.height);
+          if(fin_<canvas.height){ // couper après la dernière ligne entière de la page
+            var ok=coupes.filter(function(c){ return c>y+100 && c<=fin_; });
+            if(ok.length) fin_=Math.max.apply(null, ok);
+          }
+          var h=Math.ceil(fin_-y), page=document.createElement("canvas");
+          page.width=canvas.width; page.height=h;
+          var ctx=page.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,page.width,h);
+          ctx.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+          if(!premiere) pdf.addPage([LARGEUR,HAUTEUR],"portrait");
+          pdf.addImage(page.toDataURL("image/jpeg",0.95), "JPEG", 0, 0, LARGEUR, h/ECHELLE);
+          premiere=false; y=fin_;
+        }
+        pdf.save(filename); fin();
+      }).catch(function(){ toast("Échec de la génération du PDF"); fin(); });
+    }, 450);
   }
   function telechargerDocumentPDF(d){
     telechargerPdfDepuisHtml(genererHtmlDocument(d), (d.numero||d.type).replace(/[^a-zA-Z0-9]+/g,"-")+".pdf");
