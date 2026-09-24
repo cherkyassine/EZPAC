@@ -603,7 +603,7 @@
   var editingClientId=null, editingProductId=null, editingSupplierId=null;
   var activeTab = "clients";
   var invoiceSettings = { raisonSociale:'EZPAC', adresse:'Meryem 4 Z.I. Ain Atiq 12020 – Maroc', ice:'003254351000070', rc:'167169',
-    ifiscal:'53685916', patente:'25910031', cnss:'5092893', telephone:'+212 6 16 16 35 36 / +212 8 08 58 64 26',
+    ifiscal:'53685916', patente:'25910031', cnss:'5092893', telephone:'+212 6 16 16 35 36 / WhatsApp +212 7 08 03 23 27',
     email:'ezpacsarl@gmail.com', siteWeb:'ezpac.ma', capitalSocial:'150.000,00 DH', rib:'230 810 5004520221033200 56',
     tvaDefaut:20, piedPage:'', emailAlertes:'', alertesActives:false };
   var openItemIds = {};
@@ -777,6 +777,13 @@
   });
 
   // ---------- Data ----------
+  // Coordonnées : ancien site et ancien numéro remplacés partout (documents, étiquettes, situations)
+  function corrigerParametres(s){
+    s=Object.assign({}, s);
+    if(/ezpac\.net/i.test(String(s.siteWeb||""))) s.siteWeb="ezpac.ma";
+    s.telephone=String(s.telephone||"").replace(/(\+?212[\s.-]*|0)8[\s.-]*0?8[\s.-]*58[\s.-]*64[\s.-]*26/g, "WhatsApp +212 7 08 03 23 27");
+    return s;
+  }
   function refresh(){
     if(!CFG.url) return;
     $("refreshBtn").textContent="…";
@@ -784,7 +791,7 @@
       clients=res.clients||[]; orders=res.orders||[]; products=res.products||[];
       suppliers=res.suppliers||[]; documents=res.documents||[]; achats=res.achats||[];
       tarifs=res.tarifs||[]; rappels=res.rappels||[]; transporteurs=res.transporteurs||[]; etiquettes=res.etiquettes||[];
-      if(res.settings) invoiceSettings=res.settings;
+      if(res.settings) invoiceSettings=corrigerParametres(res.settings);
       clients.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
       products.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
       suppliers.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
