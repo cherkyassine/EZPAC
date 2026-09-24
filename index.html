@@ -1220,6 +1220,13 @@
   });
 
   // ===================== LIGNES RÉUTILISABLES (commande / devis / achat) =====================
+  // Les prix produits/lignes sont saisis TTC : on recalcule le HT à partir du TTC (et non l'inverse).
+  function calculerTotauxTTC(lignes, tvaRate){
+    var totalTTC = (lignes||[]).reduce(function(s,l){return s+Number(l.total||0);},0);
+    var totalHT = Math.round((totalTTC/(1+Number(tvaRate||0)/100))*100)/100;
+    var totalTVA = Math.round((totalTTC-totalHT)*100)/100;
+    return { totalHT:totalHT, totalTVA:totalTVA, totalTTC:Math.round(totalTTC*100)/100 };
+  }
   function nouvelleLigneVide(){ return { productId:"", designation:"", quantity:1, unitPrice:0, total:0 }; }
   function renderLinesEditor(containerId, lignes){
     var el=$(containerId);
@@ -1230,14 +1237,14 @@
         +products.map(function(p){ return '<option value="'+esc(p.id)+'"'+(p.id===l.productId?' selected':'')+'>'+esc(p.name)+'</option>'; }).join("")+'</select>';
       html+='<input class="ln-desc" data-idx="'+idx+'" placeholder="Désignation" value="'+esc(l.designation)+'"'+(l.productId?' style="display:none;"':'')+'>';
       html+='<input class="ln-qty" type="number" step="1" min="0" data-idx="'+idx+'" placeholder="Qté" value="'+(l.quantity||'')+'">';
-      html+='<input class="ln-pu" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="P.U." value="'+(l.unitPrice||'')+'">';
+      html+='<input class="ln-pu" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="P.U. TTC" value="'+(l.unitPrice||'')+'">';
       html+='<span class="total-cell">'+nf(l.total)+'</span>';
       html+='<button type="button" class="rm-btn" data-idx="'+idx+'" title="Supprimer la ligne">✕</button>';
       html+='</div>';
     });
-    var totalHT = lignes.reduce(function(s,l){return s+Number(l.total||0);},0);
     var tva = invoiceSettings.tvaDefaut!=null?Number(invoiceSettings.tvaDefaut):20;
-    html+='<div class="lines-total"><span>Total HT : '+nf(totalHT)+'</span><span>TVA '+tva+'% : '+nf(Math.round(totalHT*tva)/100)+'</span><span>TTC : '+nf(totalHT+Math.round(totalHT*tva)/100)+'</span></div>';
+    var tx=calculerTotauxTTC(lignes, tva);
+    html+='<div class="lines-total"><span>Total HT : '+nf(tx.totalHT)+'</span><span>TVA '+tva+'% : '+nf(tx.totalTVA)+'</span><span>TTC : '+nf(tx.totalTTC)+'</span></div>';
     el.innerHTML = lignes.length ? html : '<div class="hint" style="padding:6px 0;">Aucune ligne — cliquez sur « Ajouter une ligne ».</div>';
   }
   function wireLinesEditor(containerId, getLignes, setLignes, clientIdFn){
@@ -1805,13 +1812,24 @@
     api({action:"saveAchat",achat:a}).then(function(){ $("achatOverlay").classList.remove("open"); toast("Achat créé"); refresh(); })
       .catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; btn.textContent="Créer l'achat"; });
   });
+  function achatVersDocument(a){
+    var f=suppliers.find(function(x){return String(x.id)===String(a.fournisseurId);})||{};
+    var tva = invoiceSettings.tvaDefaut!=null?Number(invoiceSettings.tvaDefaut):20;
+    var tx = calculerTotauxTTC(a.lines||[], tva);
+    return { type:"BCF", numero:a.numero||"—", date:a.createdAt, lines:a.lines||[], currency:a.currency||"MAD",
+      tvaRate:tva, totalHT:tx.totalHT, totalTVA:tx.totalTVA, totalTTC:tx.totalTTC,
+      clientName:f.name||"", clientAddress:f.address||"", clientPhone:f.phone||"", clientIce:f.iceNumber||"" };
+  }
   function renderAchatCard(a){
     var lignes=a.lines||[], total=totalAchat(a), open=!!openItemIds["a-"+a.id];
     var h='<div class="item-card"><div class="item-top" id="atop-'+esc(a.id)+'">';
-    h+='<div><div class="item-title">'+esc(a.title)+'</div><div class="item-sub">'+fmtDate(a.createdAt)+' · '+nf(total)+' '+(a.currency||"MAD")+'</div></div>';
+    h+='<div><div class="item-title">'+esc(a.title)+(a.numero?' <span class="hint">('+esc(a.numero)+')</span>':'')+'</div><div class="item-sub">'+fmtDate(a.createdAt)+' · '+nf(total)+' '+(a.currency||"MAD")+'</div></div>';
     h+='<span class="pill '+(a.statutPaiement==="Payé"?"pill-success":"pill-danger")+'">'+esc(a.statutPaiement||"Non payé")+'</span></div>';
     h+='<div class="item-body'+(open?' open':'')+'">';
     if(a.description) h+='<div class="item-desc">'+esc(a.description)+'</div>';
+    h+='<div class="item-row"><button class="icon-btn" id="aprint-'+esc(a.id)+'" title="Imprimer le bon de commande">🖨</button>'
+      +'<button class="icon-btn" id="apdf-'+esc(a.id)+'" title="Télécharger en PDF">⬇</button>'
+      +'<button class="icon-btn" id="awa-'+esc(a.id)+'" title="Envoyer au fournisseur par WhatsApp">💬</button></div>';
     h+='<div class="item-row"><label class="hint">Statut :</label><select class="sel" id="ast-'+esc(a.id)+'" data-mut="1">';
     ["Commandé","Reçu","Annulé"].forEach(function(s){ h+='<option'+((a.status||"Commandé")===s?' selected':'')+'>'+s+'</option>'; });
     h+='</select><label class="hint">Paiement :</label><select class="sel" id="apay-'+esc(a.id)+'" data-mut="1">';
@@ -1823,6 +1841,14 @@
     return h;
   }
   function wireAchat(a){
+    var pr=$("aprint-"+a.id); if(pr) pr.addEventListener("click",function(e){ e.stopPropagation(); imprimerDocument(achatVersDocument(a)); });
+    var pd=$("apdf-"+a.id); if(pd) pd.addEventListener("click",function(e){ e.stopPropagation(); telechargerDocumentPDF(achatVersDocument(a)); });
+    var wa=$("awa-"+a.id); if(wa) wa.addEventListener("click",function(e){
+      e.stopPropagation();
+      var f=suppliers.find(function(x){return String(x.id)===String(a.fournisseurId);});
+      if(!f || !f.phone){ toast("Ce fournisseur n'a pas de numéro de téléphone enregistré"); return; }
+      openWhatsapp(f.phone, messageDocumentWhatsapp(achatVersDocument(a)));
+    });
     var sel=$("ast-"+a.id);
     if(sel){ sel.addEventListener("click",function(e){e.stopPropagation();});
       sel.addEventListener("change",function(){ api({action:"updateAchatStatut", id:a.id, status:this.value}).then(function(){ toast("Statut mis à jour"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); }); }); }
@@ -1892,7 +1918,8 @@
       BL: "Bonjour, voici votre bon de livraison "+d.numero+" du "+fmtDate(d.date)+". Merci de confirmer la bonne réception de la marchandise.",
       FACTURE: "Bonjour, voici votre facture "+d.numero+" du "+fmtDate(d.date)+" d'un montant de "+montant+". Merci de bien vouloir procéder au règlement.",
       DEVIS: "Bonjour, voici notre devis "+d.numero+" du "+fmtDate(d.date)+" d'un montant de "+montant+". N'hésitez pas à nous contacter pour toute question.",
-      AVOIR: "Bonjour, voici l'avoir "+d.numero+" du "+fmtDate(d.date)+" annulant la facture concernée, d'un montant de "+montant+"."
+      AVOIR: "Bonjour, voici l'avoir "+d.numero+" du "+fmtDate(d.date)+" annulant la facture concernée, d'un montant de "+montant+".",
+      BCF: "Bonjour, veuillez trouver notre bon de commande "+d.numero+" du "+fmtDate(d.date)+" d'un montant de "+montant+". Merci de nous confirmer la disponibilité et le délai de livraison."
     };
     return (textes[d.type]||("Bonjour, voici le document "+d.numero+".")) + "\n\n(PDF en pièce jointe, ou disponible via le bouton 🖨/⬇ de l'application)";
   }
@@ -1902,7 +1929,7 @@
     openWhatsapp(phone, messageDocumentWhatsapp(d));
   }
   function genererHtmlDocument(d){
-    var titres={BC:"BON DE COMMANDE", BL:"BON DE LIVRAISON", FACTURE:"FACTURE", DEVIS:"DEVIS", AVOIR:"AVOIR"};
+    var titres={BC:"BON DE COMMANDE", BL:"BON DE LIVRAISON", FACTURE:"FACTURE", DEVIS:"DEVIS", AVOIR:"AVOIR", BCF:"BON DE COMMANDE FOURNISSEUR"};
     var s=invoiceSettings;
     var lignesHtml=(d.lines||[]).map(function(l){
       return '<tr><td>'+esc(l.designation)+'</td><td style="text-align:center;">'+esc(l.quantity!=null?l.quantity:l.quantite)+'</td>'
