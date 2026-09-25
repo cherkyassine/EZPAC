@@ -139,6 +139,16 @@
   .line-row .total-cell{font-size:12.5px;font-weight:700;text-align:right;padding-right:4px;}
   .line-row .rm-btn{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:2px 6px;}
   .lines-total{display:flex;justify-content:flex-end;gap:14px;font-size:13px;padding-top:8px;border-top:1px solid var(--line);margin-top:4px;font-weight:700;}
+  .fp-row{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--paper);}
+  .fp-row select,.fp-row input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px;background:var(--paper-raised);color:var(--ink);width:100%;}
+  .fp-row .fp-full{grid-column:1/-1;}
+  .fp-row .fp-top{grid-column:1/-1;display:flex;gap:6px;align-items:center;}
+  .fp-row .rm-btn{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:2px 6px;}
+  .fp-row label{font-size:10.5px;color:var(--ink-soft);display:block;margin-bottom:2px;}
+  .fp-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:8px;}
+  .fp-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:6px;border-bottom:1px solid var(--line);}
+  .fp-table td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top;}
+  .fp-best{color:var(--success);font-weight:700;}
   .tier-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center;margin-bottom:6px;}
   .tier-row input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px;background:var(--paper-raised);color:var(--ink);width:100%;}
   .tier-row .rm-btn{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:2px 6px;}
@@ -388,7 +398,8 @@
       <div class="field"><label>Devise</label><select id="pCurrency"><option>MAD</option></select></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Prix d'achat fournisseur (TTC)</label><input id="pPurchasePrice" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="field"><label>Prix d'achat imprimé (TTC)</label><input id="pPurchasePrice" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="field"><label>Prix d'achat sans impression (TTC)</label><input id="pPurchasePlainPrice" type="number" step="0.01" placeholder="0.00"></div>
     </div>
     <div class="field-row">
       <div class="field"><label>Stock disponible</label><input id="pStock" type="number" step="1" placeholder="ex : 500"></div>
@@ -408,10 +419,22 @@
       <div class="hint" style="margin-top:6px;">Même principe que les paliers ci-dessus, pour les sacs livrés sans impression. Le prix sans impression ci-dessus reste le prix de base.</div>
     </div>
     <div class="field">
-      <label>Paliers de prix d'achat fournisseur (optionnel)</label>
+      <label>Paliers d'achat sans impression (optionnel)</label>
+      <div id="pAchPlainTiersEditor"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="pAddAchPlainTier">+ Ajouter un palier d'achat sans impression</button>
+      <div class="hint" style="margin-top:6px;">Prix payés au fournisseur pour les sacs sans impression, selon la quantité achetée.</div>
+    </div>
+    <div class="field">
+      <label>Paliers de prix d'achat fournisseur imprimé (optionnel)</label>
       <div id="pAchTiersEditor"></div>
       <button type="button" class="btn btn-ghost btn-sm" id="pAddAchTier">+ Ajouter un palier d'achat</button>
       <div class="hint" style="margin-top:6px;">Ex : à partir de 1000 pièces → 0,80 MAD ; à partir de 5000 → 0,65 MAD. Le prix d'achat ci-dessus reste le prix de base. Utilisé automatiquement dans les achats fournisseur.</div>
+    </div>
+    <div class="field">
+      <label>Prix par fournisseur (comparer plusieurs fournisseurs pour ce produit)</label>
+      <div id="pFournPrixEditor"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="pAddFournPrix">+ Ajouter un fournisseur</button>
+      <div class="hint" style="margin-top:6px;">Paliers : une quantité et un prix par palier, séparés par « ; » — ex. <b>1000=0,55 ; 5000=0,50</b>. Dans un achat, le prix du fournisseur choisi est utilisé automatiquement ; sinon, les prix d'achat ci-dessus.</div>
     </div>
     <div class="field"><label>Notes</label><textarea id="pNotes" placeholder="Détails complémentaires…"></textarea></div>
     <div class="modal-actions">
@@ -1375,7 +1398,7 @@
       html+='<select class="ln-product" data-idx="'+idx+'"><option value="">— Libre —</option>'
         +products.map(function(p){ return '<option value="'+esc(p.id)+'"'+(p.id===l.productId?' selected':'')+'>'+esc(p.name)+'</option>'; }).join("")+'</select>';
       html+='<input class="ln-desc" data-idx="'+idx+'" placeholder="Désignation" value="'+esc(l.designation)+'"'+(l.productId?' style="display:none;"':'')+'>';
-      html+= (l.productId && containerId!=="aLinesEditor")
+      html+= l.productId
         ? '<select class="ln-impr" data-idx="'+idx+'" title="Impression"><option value="">Imprimé</option><option value="1"'+(l.sansImpression?' selected':'')+'>Sans impression</option></select>'
         : '<span></span>';
       html+='<input class="ln-qty" type="number" step="1" min="0" data-idx="'+idx+'" placeholder="Qté" value="'+(l.quantity||'')+'">';
@@ -1388,6 +1411,12 @@
     var tx=calculerTotauxTTC(lignes, tva);
     html+='<div class="lines-total"><span>Total HT : '+nf(tx.totalHT)+'</span><span>TVA '+tva+'% : '+nf(tx.totalTVA)+'</span><span>TTC : '+nf(tx.totalTTC)+'</span></div>';
     el.innerHTML = lignes.length ? html : '<div class="hint" style="padding:6px 0;">Aucune ligne — cliquez sur « Ajouter une ligne ».</div>';
+  }
+  // Achat : prévenir si un autre fournisseur propose ce produit moins cher
+  function conseilFournisseur(p, l, fournisseurId){
+    var best=meilleureOffre(p, l.quantity, l.sansImpression);
+    if(best && String(best.fournisseurId)!==String(fournisseurId) && best.prix < Number(l.unitPrice||0))
+      toast("💡 Moins cher chez "+best.nom+" : "+nf(best.prix)+" MAD / pièce (au lieu de "+nf(l.unitPrice)+")");
   }
   function nomLigne(p, sansImpression){ return p.name + (sansImpression ? " – sans impression" : ""); }
   // Prix d'une ligne de vente : tarif négocié du client (sacs imprimés) sinon palier imprimé / sans impression
@@ -1412,8 +1441,11 @@
         if(p){
           if(!lignes[idx].quantity) lignes[idx].quantity=1;
           if(c.modeAchat){
-            lignes[idx].designation=p.name; lignes[idx].sansImpression=false;
-            lignes[idx].unitPrice = prixAchatParPalier(p, lignes[idx].quantity);
+            lignes[idx].designation=nomLigne(p, lignes[idx].sansImpression);
+            var fId = c.clientIdFn ? c.clientIdFn() : null;
+            var pa = prixAchatParPalier(p, lignes[idx].quantity, lignes[idx].sansImpression, fId);
+            lignes[idx].unitPrice = (pa!=null) ? pa : 0;
+            conseilFournisseur(p, lignes[idx], fId);
           } else {
             lignes[idx].designation=nomLigne(p, lignes[idx].sansImpression);
             var pv = prixLigneVente(p, lignes[idx], c.clientIdFn);
@@ -1427,9 +1459,9 @@
         lignes[idx].sansImpression = e.target.value==="1";
         if(pI){
           lignes[idx].designation = nomLigne(pI, lignes[idx].sansImpression);
-          var pv2 = prixLigneVente(pI, lignes[idx], c.clientIdFn);
+          var pv2 = c.modeAchat ? prixAchatParPalier(pI, lignes[idx].quantity, lignes[idx].sansImpression, c.clientIdFn ? c.clientIdFn() : null) : prixLigneVente(pI, lignes[idx], c.clientIdFn);
           lignes[idx].unitPrice = (pv2!=null) ? pv2 : 0;
-          if(pv2==null && lignes[idx].sansImpression) toast("Pas de prix sans impression dans la fiche « "+pI.name+" » : saisissez le prix");
+          if(pv2==null && lignes[idx].sansImpression) toast("Pas de prix "+(c.modeAchat?"d'achat ":"")+"sans impression dans la fiche « "+pI.name+" » : saisissez le prix");
         }
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
         c.setLignes(lignes); renderLinesEditor(containerId, lignes);
@@ -1439,7 +1471,8 @@
         if(e.target.classList.contains("ln-qty")){
           lignes[idx].quantity=Number(e.target.value||0);
           if(lignes[idx].productId && c.modeAchat){
-            lignes[idx].unitPrice = prixAchatParPalier(prod(lignes[idx].productId), lignes[idx].quantity);
+            var pq = prixAchatParPalier(prod(lignes[idx].productId), lignes[idx].quantity, lignes[idx].sansImpression, c.clientIdFn ? c.clientIdFn() : null);
+            if(pq!=null) lignes[idx].unitPrice = pq;
           } else if(lignes[idx].productId && prod(lignes[idx].productId)){
             var pr = prixLigneVente(prod(lignes[idx].productId), lignes[idx], c.clientIdFn);
             if(pr!=null) lignes[idx].unitPrice = pr;
@@ -1723,7 +1756,8 @@
     h+='<div class="info-item"><div class="lbl">Unité</div><div class="val">'+(p.unit?esc(p.unit):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Prix de vente imprimé</div><div class="val">'+((p.unitPrice!=null&&p.unitPrice!=="")?nf(p.unitPrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Prix sans impression</div><div class="val">'+((p.plainPrice!=null&&p.plainPrice!=="")?nf(p.plainPrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
-    h+='<div class="info-item"><div class="lbl">Prix d\'achat fournisseur</div><div class="val">'+((p.purchasePrice!=null&&p.purchasePrice!=="")?nf(p.purchasePrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Prix d\'achat imprimé</div><div class="val">'+((p.purchasePrice!=null&&p.purchasePrice!=="")?nf(p.purchasePrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Prix d\'achat sans impression</div><div class="val">'+((p.purchasePlainPrice!=null&&p.purchasePlainPrice!=="")?nf(p.purchasePlainPrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Stock</div><div class="val">'+(p.stock!=null?p.stock:'—')+(p.seuilAlerte!=null?' (seuil '+p.seuilAlerte+')':'')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Fournisseur</div><div class="val">'+(p.fournisseurName?esc(p.fournisseurName):'—')+'</div></div>';
     h+='</div>';
@@ -1741,8 +1775,32 @@
         h+='<div class="tarif-row"><span>À partir de '+t.minQty+'</span><span>'+nf(t.unitPrice)+' '+(p.currency||"MAD")+'</span></div>';
       });
     }
+    if(p.supplierPrices && p.supplierPrices.length){
+      var bestI=meilleureOffre(p, 1, false), bestS=meilleureOffre(p, 1, true);
+      h+='<div class="section-head"><h3>Prix fournisseurs ('+p.supplierPrices.length+')</h3></div>';
+      h+='<table class="fp-table"><thead><tr><th>Fournisseur</th><th>Imprimé</th><th>Sans impression</th><th>Délai / note</th></tr></thead><tbody>';
+      p.supplierPrices.forEach(function(o){
+        var cellule=function(prix, paliers, best){
+          if((prix==null||prix==="") && !(paliers&&paliers.length)) return '—';
+          var estBest = best && String(best.fournisseurId)===String(o.fournisseurId) && prix!=null && prix!=="" && Number(prix)===best.prix;
+          return '<span class="'+(estBest?'fp-best':'')+'">'+((prix!=null&&prix!=="")?nf(prix)+' MAD':'—')+(estBest?' ★':'')+'</span>'
+            +(paliers&&paliers.length?'<div class="hint">'+esc(paliersVersTexte(paliers))+'</div>':'');
+        };
+        h+='<tr><td><strong>'+esc(nomFournisseur(o.fournisseurId, o.fournisseurName))+'</strong></td>'
+          +'<td>'+cellule(o.prix, o.paliers, bestI)+'</td><td>'+cellule(o.prixSans, o.paliersSans, bestS)+'</td>'
+          +'<td>'+esc(o.delai||'')+(o.note?'<div class="hint">'+esc(o.note)+'</div>':'')+'</td></tr>';
+      });
+      h+='</tbody></table><div class="hint" style="margin-bottom:10px;">★ = le moins cher (prix de base). Dans un achat, le prix du fournisseur de l\'achat s\'applique, paliers compris.</div>';
+    }
+    if(p.purchasePlainTiers && p.purchasePlainTiers.length){
+      h+='<div class="section-head"><h3>Paliers d\'achat sans impression</h3></div>';
+      h+='<div class="tarif-row" style="font-weight:700;"><span>Quantité</span><span>'+((p.purchasePlainPrice!=null&&p.purchasePlainPrice!=="")?nf(p.purchasePlainPrice)+' '+(p.currency||"MAD")+' (base)':'—')+'</span></div>';
+      p.purchasePlainTiers.slice().sort(function(a,b){return a.minQty-b.minQty;}).forEach(function(t){
+        h+='<div class="tarif-row"><span>À partir de '+t.minQty+'</span><span>'+nf(t.unitPrice)+' '+(p.currency||"MAD")+'</span></div>';
+      });
+    }
     if(p.purchaseTiers && p.purchaseTiers.length){
-      h+='<div class="section-head"><h3>Paliers d\'achat fournisseur</h3></div>';
+      h+='<div class="section-head"><h3>Paliers d\'achat imprimé</h3></div>';
       h+='<div class="tarif-row" style="font-weight:700;"><span>Quantité</span><span>'+((p.purchasePrice!=null&&p.purchasePrice!=="")?nf(p.purchasePrice)+' '+(p.currency||"MAD")+' (base)':'—')+'</span></div>';
       p.purchaseTiers.slice().sort(function(a,b){return a.minQty-b.minQty;}).forEach(function(t){
         h+='<div class="tarif-row"><span>À partir de '+t.minQty+'</span><span>'+nf(t.unitPrice)+' '+(p.currency||"MAD")+'</span></div>';
@@ -1854,10 +1912,110 @@
   });
   $("pAddPlainTier").addEventListener("click", function(){ productPlainTiers.push({minQty:"",unitPrice:""}); renderPlainTiersEditor(); });
 
-  function prixAchatParPalier(p, qty){
+  // Paliers d'achat sans impression (même fonctionnement que les paliers d'achat)
+  var productAchatPlainTiers=[];
+  function renderAchatPlainTiersEditor(){
+    var el=$("pAchPlainTiersEditor");
+    if(!productAchatPlainTiers.length){ el.innerHTML='<div class="hint" style="padding:4px 0;">Aucun palier — le prix d\'achat sans impression de base s\'applique quelle que soit la quantité.</div>'; return; }
+    el.innerHTML = productAchatPlainTiers.map(function(t,idx){
+      return '<div class="tier-row">'
+        +'<input class="trap-qty" type="number" step="1" min="1" data-idx="'+idx+'" placeholder="À partir de (qté)" value="'+(t.minQty||"")+'">'
+        +'<input class="trap-price" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="Prix d\'achat sans impression" value="'+(t.unitPrice||"")+'">'
+        +'<button type="button" class="rm-btn" data-idx="'+idx+'">✕</button></div>';
+    }).join("");
+  }
+  $("pAchPlainTiersEditor").addEventListener("change", function(e){
+    var idx=e.target.getAttribute("data-idx"); if(idx==null) return; idx=Number(idx);
+    if(e.target.classList.contains("trap-qty")) productAchatPlainTiers[idx].minQty=Number(e.target.value||0);
+    if(e.target.classList.contains("trap-price")) productAchatPlainTiers[idx].unitPrice=Number(e.target.value||0);
+  });
+  $("pAchPlainTiersEditor").addEventListener("click", function(e){
+    if(e.target.classList.contains("rm-btn")){ productAchatPlainTiers.splice(Number(e.target.getAttribute("data-idx")),1); renderAchatPlainTiersEditor(); }
+  });
+  $("pAddAchPlainTier").addEventListener("click", function(){ productAchatPlainTiers.push({minQty:"",unitPrice:""}); renderAchatPlainTiersEditor(); });
+
+  // ---------- Prix par fournisseur ----------
+  // Paliers en texte : « 1000=0,55 ; 5000=0,50 » <-> [{minQty:1000,unitPrice:0.55},…]
+  function paliersVersTexte(t){ return (t||[]).slice().sort(function(a,b){return a.minQty-b.minQty;}).map(function(x){ return x.minQty+"="+String(x.unitPrice).replace(".",","); }).join(" ; "); }
+  function texteVersPaliers(txt){
+    return String(txt||"").split(/[;\n]+/).map(function(m){
+      var r=/(\d+)\s*[=:→>]+\s*(\d+(?:[.,]\d+)?)/.exec(m); return r ? {minQty:Number(r[1]), unitPrice:Number(r[2].replace(",","."))} : null;
+    }).filter(Boolean);
+  }
+  function nomFournisseur(id, secours){ var f=suppliers.find(function(x){return String(x.id)===String(id);}); return f ? f.name : (secours||"Fournisseur supprimé"); }
+  var productFournPrix=[];
+  function renderFournPrixEditor(){
+    var el=$("pFournPrixEditor");
+    if(!productFournPrix.length){ el.innerHTML='<div class="hint" style="padding:4px 0;">Aucun fournisseur — ajoutez-en pour comparer leurs prix.</div>'; return; }
+    el.innerHTML = productFournPrix.map(function(o,idx){
+      return '<div class="fp-row">'
+        +'<div class="fp-top"><select class="fp-f" data-idx="'+idx+'"><option value="">— Choisir le fournisseur —</option>'
+        +suppliers.map(function(f){ return '<option value="'+esc(f.id)+'"'+(String(f.id)===String(o.fournisseurId)?' selected':'')+'>'+esc(f.name)+'</option>'; }).join("")
+        +'</select><button type="button" class="rm-btn" data-idx="'+idx+'" title="Retirer ce fournisseur">✕</button></div>'
+        +'<div><label>Prix imprimé (TTC)</label><input class="fp-prix" type="number" step="0.01" min="0" data-idx="'+idx+'" value="'+(o.prix!=null?o.prix:"")+'"></div>'
+        +'<div><label>Prix sans impression (TTC)</label><input class="fp-prixsans" type="number" step="0.01" min="0" data-idx="'+idx+'" value="'+(o.prixSans!=null?o.prixSans:"")+'"></div>'
+        +'<div><label>Paliers imprimé</label><input class="fp-pal" data-idx="'+idx+'" placeholder="1000=0,55 ; 5000=0,50" value="'+esc(paliersVersTexte(o.paliers))+'"></div>'
+        +'<div><label>Paliers sans impression</label><input class="fp-palsans" data-idx="'+idx+'" placeholder="1000=0,30" value="'+esc(paliersVersTexte(o.paliersSans))+'"></div>'
+        +'<div><label>Délai</label><input class="fp-delai" data-idx="'+idx+'" placeholder="ex : 10 jours" value="'+esc(o.delai||"")+'"></div>'
+        +'<div><label>Note</label><input class="fp-note" data-idx="'+idx+'" placeholder="ex : minimum 1000 pcs" value="'+esc(o.note||"")+'"></div>'
+        +'</div>';
+    }).join("");
+  }
+  $("pFournPrixEditor").addEventListener("change", function(e){
+    var idx=e.target.getAttribute("data-idx"); if(idx==null) return; var o=productFournPrix[Number(idx)]; if(!o) return;
+    var cl=e.target.classList, v=e.target.value;
+    if(cl.contains("fp-f")) o.fournisseurId=v;
+    if(cl.contains("fp-prix")) o.prix = v!=="" ? Number(v) : null;
+    if(cl.contains("fp-prixsans")) o.prixSans = v!=="" ? Number(v) : null;
+    if(cl.contains("fp-pal")){ o.paliers=texteVersPaliers(v); e.target.value=paliersVersTexte(o.paliers); }
+    if(cl.contains("fp-palsans")){ o.paliersSans=texteVersPaliers(v); e.target.value=paliersVersTexte(o.paliersSans); }
+    if(cl.contains("fp-delai")) o.delai=v.trim();
+    if(cl.contains("fp-note")) o.note=v.trim();
+  });
+  $("pFournPrixEditor").addEventListener("click", function(e){
+    if(e.target.classList.contains("rm-btn")){ productFournPrix.splice(Number(e.target.getAttribute("data-idx")),1); renderFournPrixEditor(); }
+  });
+  $("pAddFournPrix").addEventListener("click", function(){
+    if(!suppliers.length){ toast("Créez d'abord un fournisseur (onglet Fournisseurs)"); return; }
+    productFournPrix.push({fournisseurId:"", prix:null, prixSans:null, paliers:[], paliersSans:[], delai:"", note:""}); renderFournPrixEditor();
+  });
+  // Offre d'un fournisseur pour un produit (ou null)
+  function offreFournisseur(p, fournisseurId){
+    if(!p || !fournisseurId) return null;
+    return (p.supplierPrices||[]).find(function(o){ return String(o.fournisseurId)===String(fournisseurId); }) || null;
+  }
+  // Prix d'une offre selon la quantité (null si l'offre n'a pas ce prix)
+  function prixOffre(o, qty, sansImpression){
+    if(!o) return null;
+    var prix = sansImpression ? o.prixSans : o.prix, paliers = (sansImpression ? o.paliersSans : o.paliers) || [];
+    prix = (prix!=null && prix!=="") ? Number(prix) : null;
+    paliers.slice().sort(function(a,b){return Number(a.minQty)-Number(b.minQty);}).forEach(function(t){ if(Number(qty)>=Number(t.minQty)) prix=Number(t.unitPrice); });
+    return prix;
+  }
+  // Fournisseur le moins cher pour une quantité (null si aucun prix)
+  function meilleureOffre(p, qty, sansImpression){
+    var best=null;
+    (p && p.supplierPrices || []).forEach(function(o){
+      var px=prixOffre(o, qty, sansImpression);
+      if(px!=null && (best==null || px<best.prix)) best={fournisseurId:o.fournisseurId, nom:nomFournisseur(o.fournisseurId, o.fournisseurName), prix:px};
+    });
+    return best;
+  }
+
+  // Prix d'achat selon la quantité ; sansImpression : prix d'achat sans impression (null si non renseigné → prix à saisir)
+  function prixAchatParPalier(p, qty, sansImpression, fournisseurId){
     if(!p) return 0;
-    var prix = (p.purchasePrice!=null && p.purchasePrice!=="") ? Number(p.purchasePrice) : Number(p.unitPrice||0);
-    (p.purchaseTiers||[]).slice().sort(function(a,b){return Number(a.minQty)-Number(b.minQty);})
+    var pxF = prixOffre(offreFournisseur(p, fournisseurId), qty, sansImpression);
+    if(pxF!=null) return pxF;
+    var prix, paliers;
+    if(sansImpression){
+      prix = (p.purchasePlainPrice!=null && p.purchasePlainPrice!=="") ? Number(p.purchasePlainPrice) : null;
+      paliers = p.purchasePlainTiers||[];
+    } else {
+      prix = (p.purchasePrice!=null && p.purchasePrice!=="") ? Number(p.purchasePrice) : Number(p.unitPrice||0);
+      paliers = p.purchaseTiers||[];
+    }
+    paliers.slice().sort(function(a,b){return Number(a.minQty)-Number(b.minQty);})
       .forEach(function(t){ if(Number(qty)>=Number(t.minQty)) prix=Number(t.unitPrice); });
     return prix;
   }
@@ -1878,6 +2036,11 @@
     productPriceTiers = (ex && ex.priceTiers) ? ex.priceTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
     renderPriceTiersEditor(); wirePriceTiersEditor();
     $("pPlainPrice").value=(ex&&ex.plainPrice!=null&&ex.plainPrice!=="")?ex.plainPrice:"";
+    $("pPurchasePlainPrice").value=(ex&&ex.purchasePlainPrice!=null&&ex.purchasePlainPrice!=="")?ex.purchasePlainPrice:"";
+    productAchatPlainTiers = (ex && ex.purchasePlainTiers) ? ex.purchasePlainTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
+    renderAchatPlainTiersEditor();
+    productFournPrix = (ex && ex.supplierPrices) ? ex.supplierPrices.map(function(o){ return Object.assign({paliers:[], paliersSans:[]}, o); }) : [];
+    renderFournPrixEditor();
     productPlainTiers = (ex && ex.plainTiers) ? ex.plainTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
     renderPlainTiersEditor();
     productAchatTiers = (ex && ex.purchaseTiers) ? ex.purchaseTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
@@ -1900,7 +2063,13 @@
       priceTiers: tiersValides, notes:$("pNotes").value.trim(),
       purchaseTiers: productAchatTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }),
       plainPrice: $("pPlainPrice").value!=="" ? Number($("pPlainPrice").value) : null,
-      plainTiers: productPlainTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }) };
+      plainTiers: productPlainTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }),
+      purchasePlainPrice: $("pPurchasePlainPrice").value!=="" ? Number($("pPurchasePlainPrice").value) : null,
+      purchasePlainTiers: productAchatPlainTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }),
+      supplierPrices: productFournPrix.filter(function(o){ return o.fournisseurId; }).map(function(o){
+        return { fournisseurId:o.fournisseurId, fournisseurName:nomFournisseur(o.fournisseurId, o.fournisseurName),
+          prix:o.prix, prixSans:o.prixSans, paliers:o.paliers||[], paliersSans:o.paliersSans||[], delai:o.delai||"", note:o.note||"", maj:new Date().toISOString() };
+      }) };
     var btn=$("saveProductBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
     api({action:"saveProduct",product:p}).then(function(res){
       $("productOverlay").classList.remove("open"); toast(editingProductId?"Produit mis à jour":"Produit créé");
@@ -1934,7 +2103,7 @@
     return { as:as, totalAch:totalAch, totalPaye:totalPaye, solde:totalAch-totalPaye };
   }
   function renderSupplierDetail(f){
-    var produitsLies = products.filter(function(p){ return String(p.fournisseurId)===String(f.id); });
+    var produitsLies = products.filter(function(p){ return String(p.fournisseurId)===String(f.id) || !!offreFournisseur(p, f.id); });
     var x = situationFournisseurDonnees(f);
     var h='<div class="detail-inner">';
     h+='<div class="head-block"><div><h2>'+esc(f.name)+'</h2><div class="sub">Ajouté le '+fmtDate(f.createdAt)+'</div></div>';
@@ -1955,7 +2124,14 @@
     if(f.notes) h+='<div class="notes-block">'+esc(f.notes)+'</div>';
     h+='<div class="section-head"><h3>Produits fournis ('+produitsLies.length+')</h3></div>';
     if(!produitsLies.length) h+='<div class="empty-hint">Aucun produit du catalogue lié à ce fournisseur.</div>';
-    else produitsLies.forEach(function(p){ h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(p.name)+'</div><div class="item-sub">'+(p.dimensions?esc(p.dimensions):'')+'</div></div></div></div>'; });
+    else produitsLies.forEach(function(p){
+      var o=offreFournisseur(p, f.id), prixTxt='';
+      if(o){
+        prixTxt = 'Imprimé : '+((o.prix!=null&&o.prix!=="")?nf(o.prix)+' MAD':'—')+' · Sans impression : '+((o.prixSans!=null&&o.prixSans!=="")?nf(o.prixSans)+' MAD':'—')+(o.delai?' · '+esc(o.delai):'');
+        var bI=meilleureOffre(p,1,false); if(bI && String(bI.fournisseurId)===String(f.id)) prixTxt+=' · <span class="fp-best">★ le moins cher</span>';
+      }
+      h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(p.name)+'</div><div class="item-sub">'+(p.dimensions?esc(p.dimensions):'')+(prixTxt?'<br>'+prixTxt:'')+'</div></div></div></div>';
+    });
 
     h+='<div class="section-head"><h3>Achats ('+x.as.length+') — Total : '+nf(x.totalAch)+' MAD</h3><button class="btn btn-primary btn-sm" id="newAchatBtn" data-mut="1">+ Achat</button></div>';
     if(!x.as.length) h+='<div class="empty-hint">Aucun achat enregistré pour ce fournisseur.</div>';
@@ -2139,11 +2315,11 @@
     achatFournisseurId=fournisseurId; achatLines=[nouvelleLigneVide()];
     $("aTitle").value=""; $("aDesc").value=""; $("aCurrency").value="MAD";
     renderLinesEditor("aLinesEditor", achatLines);
-    wireLinesEditor("aLinesEditor", function(){return achatLines;}, function(v){achatLines=v;}, null, true);
+    wireLinesEditor("aLinesEditor", function(){return achatLines;}, function(v){achatLines=v;}, function(){return achatFournisseurId;}, true);
     $("achatOverlay").classList.add("open");
     setTimeout(function(){ $("aTitle").focus(); },50);
   }
-  $("aAddLine").addEventListener("click", function(){ achatLines.push(nouvelleLigneVide()); renderLinesEditor("aLinesEditor", achatLines); wireLinesEditor("aLinesEditor", function(){return achatLines;}, function(v){achatLines=v;}, null, true); });
+  $("aAddLine").addEventListener("click", function(){ achatLines.push(nouvelleLigneVide()); renderLinesEditor("aLinesEditor", achatLines); wireLinesEditor("aLinesEditor", function(){return achatLines;}, function(v){achatLines=v;}, function(){return achatFournisseurId;}, true); });
   $("cancelAchatBtn").addEventListener("click", function(){ $("achatOverlay").classList.remove("open"); });
   $("achatOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
   $("achatForm").addEventListener("submit",function(e){
