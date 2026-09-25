@@ -133,7 +133,7 @@
   .h-when{color:var(--ink-faint);}
 
   .lines-editor{border:1px solid var(--line);border-radius:11px;padding:10px;background:var(--paper);margin-bottom:14px;}
-  .line-row{display:grid;grid-template-columns:1.6fr 0.7fr 0.9fr 0.9fr auto;gap:6px;align-items:center;margin-bottom:8px;}
+  .line-row{display:grid;grid-template-columns:1.6fr 0.9fr 0.7fr 0.9fr 0.9fr auto;gap:6px;align-items:center;margin-bottom:8px;}
   @media (max-width:520px){ .line-row{grid-template-columns:1fr 1fr;} .line-row > *{grid-column:span 1;} .line-row select{grid-column:1/-1;} }
   .line-row select, .line-row input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px;background:var(--paper-raised);color:var(--ink);width:100%;}
   .line-row .total-cell{font-size:12.5px;font-weight:700;text-align:right;padding-right:4px;}
@@ -383,7 +383,8 @@
       </div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Prix de vente (TTC)</label><input id="pUnitPrice" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="field"><label>Prix de vente imprimé (TTC)</label><input id="pUnitPrice" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="field"><label>Prix de vente sans impression (TTC)</label><input id="pPlainPrice" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Devise</label><select id="pCurrency"><option>MAD</option></select></div>
     </div>
     <div class="field-row">
@@ -399,6 +400,12 @@
       <div id="pTiersEditor"></div>
       <button type="button" class="btn btn-ghost btn-sm" id="pAddTier">+ Ajouter un palier</button>
       <div class="hint" style="margin-top:6px;">Ex : à partir de 500 pièces → 2,20 MAD ; à partir de 1000 → 2,00 MAD. Le prix unitaire ci-dessus reste le prix de base (petites quantités).</div>
+    </div>
+    <div class="field">
+      <label>Paliers de prix sans impression (optionnel)</label>
+      <div id="pPlainTiersEditor"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="pAddPlainTier">+ Ajouter un palier sans impression</button>
+      <div class="hint" style="margin-top:6px;">Même principe que les paliers ci-dessus, pour les sacs livrés sans impression. Le prix sans impression ci-dessus reste le prix de base.</div>
     </div>
     <div class="field">
       <label>Paliers de prix d'achat fournisseur (optionnel)</label>
@@ -882,11 +889,13 @@
     var t = tarifs.find(function(x){return String(x.clientId)===String(clientId) && String(x.productId)===String(productId);});
     return t ? Number(t.unitPrice) : null;
   }
-  function prixParPalier(p, qty){
+  // sansImpression : prix et paliers « sans impression » de la fiche (null si non renseignés → prix à saisir)
+  function prixParPalier(p, qty, sansImpression){
     if(!p) return null;
-    var prix = (p.unitPrice!=null)?Number(p.unitPrice):null;
-    if(p.priceTiers && p.priceTiers.length){
-      var tiers = p.priceTiers.slice().sort(function(a,b){return Number(a.minQty)-Number(b.minQty);});
+    var base = sansImpression ? p.plainPrice : p.unitPrice, paliers = sansImpression ? p.plainTiers : p.priceTiers;
+    var prix = (base!=null && base!=="")?Number(base):null;
+    if(paliers && paliers.length){
+      var tiers = paliers.slice().sort(function(a,b){return Number(a.minQty)-Number(b.minQty);});
       tiers.forEach(function(t){ if(Number(qty)>=Number(t.minQty)) prix=Number(t.unitPrice); });
     }
     return prix;
@@ -1366,6 +1375,9 @@
       html+='<select class="ln-product" data-idx="'+idx+'"><option value="">— Libre —</option>'
         +products.map(function(p){ return '<option value="'+esc(p.id)+'"'+(p.id===l.productId?' selected':'')+'>'+esc(p.name)+'</option>'; }).join("")+'</select>';
       html+='<input class="ln-desc" data-idx="'+idx+'" placeholder="Désignation" value="'+esc(l.designation)+'"'+(l.productId?' style="display:none;"':'')+'>';
+      html+= (l.productId && containerId!=="aLinesEditor")
+        ? '<select class="ln-impr" data-idx="'+idx+'" title="Impression"><option value="">Imprimé</option><option value="1"'+(l.sansImpression?' selected':'')+'>Sans impression</option></select>'
+        : '<span></span>';
       html+='<input class="ln-qty" type="number" step="1" min="0" data-idx="'+idx+'" placeholder="Qté" value="'+(l.quantity||'')+'">';
       html+='<input class="ln-pu" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="P.U. TTC" value="'+(l.unitPrice||'')+'">';
       html+='<span class="total-cell">'+nf(l.total)+'</span>';
@@ -1376,6 +1388,12 @@
     var tx=calculerTotauxTTC(lignes, tva);
     html+='<div class="lines-total"><span>Total HT : '+nf(tx.totalHT)+'</span><span>TVA '+tva+'% : '+nf(tx.totalTVA)+'</span><span>TTC : '+nf(tx.totalTTC)+'</span></div>';
     el.innerHTML = lignes.length ? html : '<div class="hint" style="padding:6px 0;">Aucune ligne — cliquez sur « Ajouter une ligne ».</div>';
+  }
+  function nomLigne(p, sansImpression){ return p.name + (sansImpression ? " – sans impression" : ""); }
+  // Prix d'une ligne de vente : tarif négocié du client (sacs imprimés) sinon palier imprimé / sans impression
+  function prixLigneVente(p, l, clientIdFn){
+    var special = (!l.sansImpression && clientIdFn) ? tarifClientProduit(clientIdFn(), p.id) : null;
+    return (special!=null) ? special : prixParPalier(p, l.quantity, l.sansImpression);
   }
   function wireLinesEditor(containerId, getLignes, setLignes, clientIdFn, modeAchat){
     var el=$(containerId);
@@ -1392,14 +1410,26 @@
         var pid=e.target.value; var p=prod(pid);
         lignes[idx].productId=pid;
         if(p){
-          lignes[idx].designation=p.name;
           if(!lignes[idx].quantity) lignes[idx].quantity=1;
           if(c.modeAchat){
+            lignes[idx].designation=p.name; lignes[idx].sansImpression=false;
             lignes[idx].unitPrice = prixAchatParPalier(p, lignes[idx].quantity);
           } else {
-            var prixSpecial = c.clientIdFn ? tarifClientProduit(c.clientIdFn(), pid) : null;
-            lignes[idx].unitPrice = (prixSpecial!=null) ? prixSpecial : prixParPalier(p, lignes[idx].quantity);
+            lignes[idx].designation=nomLigne(p, lignes[idx].sansImpression);
+            var pv = prixLigneVente(p, lignes[idx], c.clientIdFn);
+            lignes[idx].unitPrice = (pv!=null) ? pv : 0;
           }
+        }
+        lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
+        c.setLignes(lignes); renderLinesEditor(containerId, lignes);
+      } else if(e.target.classList.contains("ln-impr")){
+        var pI=prod(lignes[idx].productId);
+        lignes[idx].sansImpression = e.target.value==="1";
+        if(pI){
+          lignes[idx].designation = nomLigne(pI, lignes[idx].sansImpression);
+          var pv2 = prixLigneVente(pI, lignes[idx], c.clientIdFn);
+          lignes[idx].unitPrice = (pv2!=null) ? pv2 : 0;
+          if(pv2==null && lignes[idx].sansImpression) toast("Pas de prix sans impression dans la fiche « "+pI.name+" » : saisissez le prix");
         }
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
         c.setLignes(lignes); renderLinesEditor(containerId, lignes);
@@ -1410,9 +1440,8 @@
           lignes[idx].quantity=Number(e.target.value||0);
           if(lignes[idx].productId && c.modeAchat){
             lignes[idx].unitPrice = prixAchatParPalier(prod(lignes[idx].productId), lignes[idx].quantity);
-          } else if(lignes[idx].productId){
-            var prixSpecial2 = c.clientIdFn ? tarifClientProduit(c.clientIdFn(), lignes[idx].productId) : null;
-            var pr = (prixSpecial2!=null) ? prixSpecial2 : prixParPalier(prod(lignes[idx].productId), lignes[idx].quantity);
+          } else if(lignes[idx].productId && prod(lignes[idx].productId)){
+            var pr = prixLigneVente(prod(lignes[idx].productId), lignes[idx], c.clientIdFn);
             if(pr!=null) lignes[idx].unitPrice = pr;
           }
         }
@@ -1692,15 +1721,23 @@
     h+='<div class="info-item"><div class="lbl">Grammage</div><div class="val">'+(p.grammage?esc(p.grammage):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Couleur</div><div class="val">'+(p.color?esc(p.color):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Unité</div><div class="val">'+(p.unit?esc(p.unit):'—')+'</div></div>';
-    h+='<div class="info-item"><div class="lbl">Prix de vente</div><div class="val">'+((p.unitPrice!=null&&p.unitPrice!=="")?nf(p.unitPrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Prix de vente imprimé</div><div class="val">'+((p.unitPrice!=null&&p.unitPrice!=="")?nf(p.unitPrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Prix sans impression</div><div class="val">'+((p.plainPrice!=null&&p.plainPrice!=="")?nf(p.plainPrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Prix d\'achat fournisseur</div><div class="val">'+((p.purchasePrice!=null&&p.purchasePrice!=="")?nf(p.purchasePrice)+" "+(p.currency||"MAD"):'—')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Stock</div><div class="val">'+(p.stock!=null?p.stock:'—')+(p.seuilAlerte!=null?' (seuil '+p.seuilAlerte+')':'')+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Fournisseur</div><div class="val">'+(p.fournisseurName?esc(p.fournisseurName):'—')+'</div></div>';
     h+='</div>';
     if(p.priceTiers && p.priceTiers.length){
-      h+='<div class="section-head"><h3>Paliers de prix</h3></div>';
+      h+='<div class="section-head"><h3>Paliers de prix (imprimé)</h3></div>';
       h+='<div class="tarif-row" style="font-weight:700;"><span>Quantité</span><span>'+nf(p.unitPrice)+' '+(p.currency||"MAD")+' (base)</span></div>';
       p.priceTiers.slice().sort(function(a,b){return a.minQty-b.minQty;}).forEach(function(t){
+        h+='<div class="tarif-row"><span>À partir de '+t.minQty+'</span><span>'+nf(t.unitPrice)+' '+(p.currency||"MAD")+'</span></div>';
+      });
+    }
+    if(p.plainTiers && p.plainTiers.length){
+      h+='<div class="section-head"><h3>Paliers sans impression</h3></div>';
+      h+='<div class="tarif-row" style="font-weight:700;"><span>Quantité</span><span>'+((p.plainPrice!=null&&p.plainPrice!=="")?nf(p.plainPrice)+' '+(p.currency||"MAD")+' (base)':'—')+'</span></div>';
+      p.plainTiers.slice().sort(function(a,b){return a.minQty-b.minQty;}).forEach(function(t){
         h+='<div class="tarif-row"><span>À partir de '+t.minQty+'</span><span>'+nf(t.unitPrice)+' '+(p.currency||"MAD")+'</span></div>';
       });
     }
@@ -1795,6 +1832,28 @@
     if(e.target.classList.contains("rm-btn")){ productAchatTiers.splice(Number(e.target.getAttribute("data-idx")),1); renderAchatTiersEditor(); }
   });
   $("pAddAchTier").addEventListener("click", function(){ productAchatTiers.push({minQty:"",unitPrice:""}); renderAchatTiersEditor(); });
+  // Paliers sans impression (même fonctionnement que les paliers d'achat)
+  var productPlainTiers=[];
+  function renderPlainTiersEditor(){
+    var el=$("pPlainTiersEditor");
+    if(!productPlainTiers.length){ el.innerHTML='<div class="hint" style="padding:4px 0;">Aucun palier — le prix sans impression de base s\'applique quelle que soit la quantité.</div>'; return; }
+    el.innerHTML = productPlainTiers.map(function(t,idx){
+      return '<div class="tier-row">'
+        +'<input class="trp-qty" type="number" step="1" min="1" data-idx="'+idx+'" placeholder="À partir de (qté)" value="'+(t.minQty||"")+'">'
+        +'<input class="trp-price" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="Prix sans impression" value="'+(t.unitPrice||"")+'">'
+        +'<button type="button" class="rm-btn" data-idx="'+idx+'">✕</button></div>';
+    }).join("");
+  }
+  $("pPlainTiersEditor").addEventListener("change", function(e){
+    var idx=e.target.getAttribute("data-idx"); if(idx==null) return; idx=Number(idx);
+    if(e.target.classList.contains("trp-qty")) productPlainTiers[idx].minQty=Number(e.target.value||0);
+    if(e.target.classList.contains("trp-price")) productPlainTiers[idx].unitPrice=Number(e.target.value||0);
+  });
+  $("pPlainTiersEditor").addEventListener("click", function(e){
+    if(e.target.classList.contains("rm-btn")){ productPlainTiers.splice(Number(e.target.getAttribute("data-idx")),1); renderPlainTiersEditor(); }
+  });
+  $("pAddPlainTier").addEventListener("click", function(){ productPlainTiers.push({minQty:"",unitPrice:""}); renderPlainTiersEditor(); });
+
   function prixAchatParPalier(p, qty){
     if(!p) return 0;
     var prix = (p.purchasePrice!=null && p.purchasePrice!=="") ? Number(p.purchasePrice) : Number(p.unitPrice||0);
@@ -1818,6 +1877,9 @@
     sel.value = ex && ex.fournisseurId ? ex.fournisseurId : "";
     productPriceTiers = (ex && ex.priceTiers) ? ex.priceTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
     renderPriceTiersEditor(); wirePriceTiersEditor();
+    $("pPlainPrice").value=(ex&&ex.plainPrice!=null&&ex.plainPrice!=="")?ex.plainPrice:"";
+    productPlainTiers = (ex && ex.plainTiers) ? ex.plainTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
+    renderPlainTiersEditor();
     productAchatTiers = (ex && ex.purchaseTiers) ? ex.purchaseTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
     renderAchatTiersEditor();
     $("productOverlay").classList.add("open");
@@ -1836,7 +1898,9 @@
       currency:$("pCurrency").value, stock:$("pStock").value!==""?Number($("pStock").value):null,
       seuilAlerte:$("pSeuil").value!==""?Number($("pSeuil").value):null, fournisseurId:fid, fournisseurName: fs?fs.name:"",
       priceTiers: tiersValides, notes:$("pNotes").value.trim(),
-      purchaseTiers: productAchatTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }) };
+      purchaseTiers: productAchatTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }),
+      plainPrice: $("pPlainPrice").value!=="" ? Number($("pPlainPrice").value) : null,
+      plainTiers: productPlainTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }) };
     var btn=$("saveProductBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
     api({action:"saveProduct",product:p}).then(function(res){
       $("productOverlay").classList.remove("open"); toast(editingProductId?"Produit mis à jour":"Produit créé");
@@ -2646,7 +2710,7 @@
     try{ $("dDate").value = new Date(d.date).toISOString().slice(0,10); }catch(e){ $("dDate").value=""; }
     $("dNotes").value = d.notes||"";
     docLines = (d.lines||[]).map(function(l){
-      return { productId:l.productId||"", designation:l.designation, quantity:l.quantity!=null?l.quantity:l.quantite, unitPrice:l.unitPrice!=null?l.unitPrice:l.prixUnitaire, total:l.total };
+      return { productId:l.productId||"", designation:l.designation, quantity:l.quantity!=null?l.quantity:l.quantite, unitPrice:l.unitPrice!=null?l.unitPrice:l.prixUnitaire, total:l.total, sansImpression:!!l.sansImpression };
     });
     if(!docLines.length) docLines=[nouvelleLigneVide()];
     renderLinesEditor("dLinesEditor", docLines);
