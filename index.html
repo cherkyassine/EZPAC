@@ -139,6 +139,11 @@
   .line-row .total-cell{font-size:12.5px;font-weight:700;text-align:right;padding-right:4px;}
   .line-row .rm-btn{border:none;background:none;color:var(--danger);cursor:pointer;font-size:16px;padding:2px 6px;}
   .lines-total{display:flex;justify-content:flex-end;gap:14px;font-size:13px;padding-top:8px;border-top:1px solid var(--line);margin-top:4px;font-weight:700;}
+  .photo-apercu{width:120px;height:120px;border:1px solid var(--line);border-radius:10px;background:var(--paper);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .photo-apercu img{max-width:100%;max-height:100%;object-fit:contain;}
+  .cat-choix{display:flex;gap:8px;align-items:flex-start;padding:5px 2px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;}
+  .cat-liste{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 10px;background:var(--paper);}
+  .produit-photo{width:100%;max-height:220px;object-fit:contain;border:1px solid var(--line);border-radius:12px;background:var(--paper);margin-bottom:12px;}
   .fp-row{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--paper);}
   .fp-row select,.fp-row input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px;background:var(--paper-raised);color:var(--ink);width:100%;}
   .fp-row .fp-full{grid-column:1/-1;}
@@ -284,6 +289,7 @@
       <button class="btn btn-primary btn-block" id="newBtn" data-mut="1">+ Nouveau</button>
       <input type="file" id="importExcelInput" accept=".xlsx,.xls,.csv" style="display:none;">
       <button class="btn btn-ghost btn-block" id="importExcelBtn" data-mut="1" style="display:none;margin-top:8px;">📥 Importer depuis Excel</button>
+      <button class="btn btn-ghost btn-block" id="catalogueBtn" style="display:none;margin-top:8px;">📘 Catalogue (FR / AR)</button>
     </div>
   </div>
   <div class="col-detail" id="colDetail">
@@ -436,6 +442,20 @@
       <button type="button" class="btn btn-ghost btn-sm" id="pAddFournPrix">+ Ajouter un fournisseur</button>
       <div class="hint" style="margin-top:6px;">Paliers : une quantité et un prix par palier, séparés par « ; » — ex. <b>1000=0,55 ; 5000=0,50</b>. Dans un achat, le prix du fournisseur choisi est utilisé automatiquement ; sinon, les prix d'achat ci-dessus.</div>
     </div>
+    <div class="field" style="border-top:1px solid var(--line);padding-top:14px;">
+      <label>📘 Catalogue — photo et textes</label>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;">
+        <div class="photo-apercu" id="pPhotoApercu"></div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <button type="button" class="btn btn-ghost btn-sm" id="pPhotoBtn">📷 Choisir une photo</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="pPhotoRetirer" style="display:none;">✕ Retirer la photo</button>
+          <input type="file" id="pPhotoInput" accept="image/*" style="display:none;">
+        </div>
+      </div>
+      <div class="field"><label>Nom en arabe</label><input id="pNameAr" dir="rtl" placeholder="مثال: كيس بمقبض 30×40"></div>
+      <div class="field"><label>Description catalogue (français)</label><textarea id="pDescFr" rows="2" placeholder="Ex : Sac non tissé réutilisable, idéal pharmacies et boutiques."></textarea></div>
+      <div class="field"><label>Description catalogue (arabe)</label><textarea id="pDescAr" rows="2" dir="rtl" placeholder="مثال: كيس غير منسوج قابل لإعادة الاستعمال"></textarea></div>
+    </div>
     <div class="field"><label>Notes</label><textarea id="pNotes" placeholder="Détails complémentaires…"></textarea></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="cancelProductBtn">Annuler</button>
@@ -485,6 +505,25 @@
 </div></div>
 
 <!-- Shipping label modal -->
+<div class="overlay" id="catalogueOverlay"><div class="modal">
+  <h3>📘 Préparer un catalogue</h3>
+  <div class="field"><label>Titre</label><input id="catTitre" placeholder="Catalogue EZPAC 2026"></div>
+  <div class="field-row">
+    <div class="field"><label>Langue</label><select id="catLangue"><option value="fr">Français</option><option value="ar">العربية (arabe)</option><option value="bi">Bilingue français + arabe</option></select></div>
+    <div class="field"><label>Prix affichés</label><select id="catPrix"><option value="tous">Imprimé + sans impression</option><option value="imprime">Imprimé seulement</option><option value="sans">Sans impression seulement</option><option value="aucun">Sans prix</option></select></div>
+  </div>
+  <label class="cat-choix" style="border:0;"><input type="checkbox" id="catPaliers" checked> <span>Afficher les prix par quantité (paliers)</span></label>
+  <div class="field"><label>Produits <button type="button" class="btn btn-ghost btn-sm" id="catToutCocher" style="margin-left:6px;">Tout cocher / décocher</button></label>
+    <div class="cat-liste" id="catProduits"></div>
+    <div class="hint" style="margin-top:6px;">Ajoutez une photo, le nom en arabe et une courte description dans chaque fiche produit (section « Catalogue ») pour un catalogue complet.</div>
+  </div>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-ghost" id="catAnnuler">Fermer</button>
+    <button type="button" class="btn btn-ghost" id="catImprimer">🖨 Aperçu / imprimer</button>
+    <button type="button" class="btn btn-primary" id="catPdf">⬇ Télécharger en PDF</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="etiquetteOverlay"><div class="modal">
   <h3>Générer une étiquette d'envoi</h3>
   <form id="etiquetteForm">
@@ -957,6 +996,7 @@
     $("newBtn").textContent = newBtnLabels[tab];
     $("orderFilterRow").style.display = tab==="ordersAll" ? "flex" : "none";
     $("importExcelBtn").style.display = tab==="products" ? "block" : "none";
+    $("catalogueBtn").style.display = tab==="products" ? "block" : "none";
     $("clientTagFilterRow").style.display = tab==="clients" ? "flex" : "none";
     renderList(); renderDetail();
   }
@@ -1748,6 +1788,8 @@
     var h='<div class="detail-inner">';
     h+='<div class="head-block"><div><h2>'+esc(p.name)+'</h2><div class="sub">Ajouté le '+fmtDate(p.createdAt)+'</div></div>';
     h+='<div class="head-actions"><button class="icon-btn" id="editProductBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="duplicateProductBtn" title="Dupliquer pour créer un nouveau produit" data-mut="1">📋</button><button class="icon-btn" id="deleteProductBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
+    if(p.photo) h+='<img class="produit-photo" src="'+esc(p.photo)+'" alt="'+esc(p.name)+'">';
+    if(p.nameAr) h+='<div dir="rtl" style="font-size:15px;font-weight:700;margin:-4px 0 10px;">'+esc(p.nameAr)+'</div>';
     if(basStock) h+='<div class="notes-block" style="border-color:var(--danger);color:var(--danger);font-weight:600;">⚠ Stock bas : '+p.stock+' restant(s) (seuil : '+p.seuilAlerte+')</div>';
     h+='<div class="info-grid">';
     h+='<div class="info-item"><div class="lbl">Dimensions</div><div class="val">'+(p.dimensions?esc(p.dimensions):'—')+'</div></div>';
@@ -2020,6 +2062,174 @@
     return prix;
   }
 
+  // ===================== CATALOGUE PRODUITS (FR / AR / bilingue) =====================
+  var COULEURS_AR = { "blanc":"أبيض", "écru":"إيكرو", "ecru":"إيكرو", "noir":"أسود", "rouge":"أحمر", "bleu marine":"أزرق داكن", "marine":"أزرق داكن",
+    "bleu ciel":"أزرق فاتح", "bleu":"أزرق", "vert":"أخضر", "jaune":"أصفر", "orange":"برتقالي", "gris":"رمادي", "beige":"بيج", "rose":"وردي",
+    "violet":"بنفسجي", "marron":"بني", "bordeaux":"عنابي", "doré":"ذهبي", "argent":"فضي", "argenté":"فضي", "transparent":"شفاف", "kraft":"كرافت" };
+  function couleursAr(txt){
+    return String(txt||"").split(/\s*[,/;]\s*/).filter(Boolean).map(function(c){
+      var k=c.toLowerCase().trim(); return COULEURS_AR[k] || c;
+    }).join("، ");
+  }
+  var UNITES_AR = { "pièce":"القطعة", "kg":"الكيلوغرام", "lot de 100":"رزمة من 100", "rouleau":"اللفة" };
+  var TXT_CAT = {
+    fr: { dir:"ltr", dims:"Dimensions", gram:"Grammage", couleurs:"Couleurs", unite:"Unité", imprime:"Imprimé (1 couleur)", sans:"Sans impression",
+          des:"dès", prixUnit:function(u){ return "Prix TTC par "+(u||"pièce"); }, date:"Prix valables au", sansPhoto:"Photo à venir",
+          note:"Prix TTC en MAD. Impression 1 couleur de votre logo. Devis gratuit sur demande.", contact:"Contact", page:"Catalogue" },
+    ar: { dir:"rtl", dims:"المقاس", gram:"الوزن", couleurs:"الألوان", unite:"الوحدة", imprime:"مطبوع (لون واحد)", sans:"بدون طباعة",
+          des:"ابتداءً من", prixUnit:function(u){ return "السعر شامل الضريبة لـ"+(UNITES_AR[u]||UNITES_AR["pièce"]); }, date:"الأسعار صالحة بتاريخ", sansPhoto:"الصورة قريبًا",
+          note:"الأسعار بالدرهم شاملة الضريبة. طباعة شعارك بلون واحد. عرض سعر مجاني عند الطلب.", contact:"للتواصل", page:"الكتالوج" }
+  };
+  // Dimensions et chiffres toujours affichés de gauche à droite (sinon « 20×25 » devient « 25×20 » en arabe)
+  function ltr(v){ return '<bdi dir="ltr">'+esc(v)+'</bdi>'; }
+  function escDims(v){ return esc(v).replace(/\d+(?:[.,]\d+)?\s*[×xX]\s*\d+(?:[.,]\d+)?/g, function(m){ return '<bdi dir="ltr">'+m+'</bdi>'; }); }
+  function prixCatalogue(p, sans){
+    var base = sans ? p.plainPrice : p.unitPrice, paliers = (sans ? p.plainTiers : p.priceTiers) || [];
+    return { base: (base!=null && base!=="") ? Number(base) : null,
+             paliers: paliers.filter(function(t){ return Number(t.minQty)>0; }).slice().sort(function(a,b){return a.minQty-b.minQty;}) };
+  }
+  function genererHtmlCatalogue(opt){
+    var s=invoiceSettings||{}, langs = opt.langue==="bi" ? ["fr","ar"] : [opt.langue];
+    var principale = langs[0], T = TXT_CAT[principale], dev="MAD";
+    var lbl = function(cle){ return langs.map(function(l){ return TXT_CAT[l][cle]; }).join(" · "); };
+    var dateTxt = new Date().toLocaleDateString("fr-FR");
+    var carte = function(p){
+      var h='<div class="cat-item">';
+      h+='<div class="cat-photo">'+(p.photo ? '<img src="'+esc(p.photo)+'" crossorigin="anonymous" alt="'+esc(p.name)+'">' : '<span>'+esc(lbl("sansPhoto"))+'</span>')+'</div>';
+      h+='<div class="cat-body">';
+      langs.forEach(function(l){
+        var nom = l==="ar" ? (p.nameAr||p.name) : p.name, desc = l==="ar" ? p.descAr : p.descFr;
+        h+='<div class="cat-nom" dir="'+TXT_CAT[l].dir+'">'+escDims(nom)+'</div>';
+        if(desc) h+='<div class="cat-desc" dir="'+TXT_CAT[l].dir+'">'+escDims(desc)+'</div>';
+      });
+      var specs=[];
+      if(p.dimensions) specs.push([lbl("dims"), ltr(p.dimensions)]);
+      if(p.grammage) specs.push([lbl("gram"), ltr(p.grammage)]);
+      if(p.color) specs.push([lbl("couleurs"), langs.map(function(l){ return l==="ar" ? '<span dir="rtl">'+esc(couleursAr(p.color))+'</span>' : esc(p.color); }).join(" · ")]);
+      if(specs.length) h+='<table class="cat-specs">'+specs.map(function(x){ return '<tr><th>'+esc(x[0])+'</th><td>'+x[1]+'</td></tr>'; }).join("")+'</table>';
+      if(opt.prix!=="aucun"){
+        var lignes=[];
+        [["imprime", false], ["sans", true]].forEach(function(k){
+          if(opt.prix!=="tous" && opt.prix!==k[0]) return;
+          var px=prixCatalogue(p, k[1]); if(px.base==null && !px.paliers.length) return;
+          var paliers = opt.paliers ? px.paliers.map(function(t){ return '<div class="cat-palier">'+esc(lbl("des"))+' '+ltr(nf(t.minQty))+' : <b>'+ltr(mt(t.unitPrice)+' '+dev)+'</b></div>'; }).join("") : "";
+          lignes.push('<div class="cat-prix-ligne"><span class="cat-prix-type">'+esc(lbl(k[0]))+'</span><span class="cat-prix-val">'+(px.base!=null?ltr(mt(px.base)+' '+dev):'—')+'</span></div>'+paliers);
+        });
+        if(lignes.length) h+='<div class="cat-prix"><div class="cat-prix-titre">'+esc(langs.map(function(l){ return TXT_CAT[l].prixUnit(p.unit); }).join(" · "))+'</div>'+lignes.join("")+'</div>';
+      }
+      h+='</div></div>';
+      return h;
+    };
+    var rangees=[];
+    for(var i=0;i<opt.produits.length;i+=2) rangees.push('<div class="cat-row">'+carte(opt.produits[i])+(opt.produits[i+1]?carte(opt.produits[i+1]):'<div class="cat-item cat-vide"></div>')+'</div>');
+    var contact = [s.telephone?'📞 '+ltr(s.telephone):'', s.email?'✉️ '+esc(s.email):'', s.siteWeb?'🌐 '+esc(String(s.siteWeb).replace(/^https?:\/\//,'').replace(/\/$/,'')):'' ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+    var css = ''
+      +'.catalogue{box-sizing:border-box;width:794px;margin:0 auto;background:#fff;color:#1B1E24;font-family:"Segoe UI",Arial,Helvetica,sans-serif;font-size:12px;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.catalogue[dir="rtl"]{font-family:Tahoma,"Segoe UI",Arial,sans-serif;}'
+      +'.catalogue *{box-sizing:border-box;}'
+      +'.catalogue .accent{height:6px;background:linear-gradient(90deg,#E4202C 0 25%,#F29100 25% 50%,#00A3C7 50% 75%,#1F2B45 75% 100%);}'
+      +'.catalogue .cat-head{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:22px 34px 16px;border-bottom:2px solid #1F2B45;}'
+      +'.catalogue .cat-head img{height:64px;width:auto;}'
+      +'.catalogue .cat-titre{text-align:end;}'
+      +'.catalogue .cat-titre h1{margin:0;font-size:24px;color:#1F2B45;letter-spacing:.02em;}'
+      +'.catalogue .cat-titre div{font-size:11px;color:#6B7380;margin-top:4px;}'
+      +'.catalogue .cat-grille{padding:16px 26px 6px;}'
+      +'.catalogue .cat-row{display:flex;gap:16px;margin-bottom:16px;page-break-inside:avoid;break-inside:avoid;}'
+      +'.catalogue .cat-item{flex:1;border:1px solid #E2E0DA;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;background:#fff;}'
+      +'.catalogue .cat-vide{border:0;}'
+      +'.catalogue .cat-photo{height:190px;background:#F5F4F0;display:flex;align-items:center;justify-content:center;}'
+      +'.catalogue .cat-photo img{max-width:100%;max-height:190px;object-fit:contain;display:block;}'
+      +'.catalogue .cat-photo span{color:#9AA1AA;font-size:11px;}'
+      +'.catalogue .cat-body{padding:10px 12px 12px;}'
+      +'.catalogue .cat-nom{font-size:14.5px;font-weight:700;color:#1F2B45;}'
+      +'.catalogue .cat-nom[dir="rtl"]{text-align:right;}'
+      +'.catalogue .cat-desc{font-size:11px;color:#4A5260;margin-top:2px;}'
+      +'.catalogue .cat-desc[dir="rtl"]{text-align:right;}'
+      +'.catalogue .cat-specs{width:100%;border-collapse:collapse;margin:8px 0 6px;}'
+      +'.catalogue .cat-specs th{text-align:start;font-weight:600;color:#6B7380;font-size:10.5px;padding:2px 0;padding-inline-end:10px;white-space:nowrap;vertical-align:top;width:1%;}'
+      +'.catalogue .cat-specs td{font-size:11.5px;padding:2px 0;}'
+      +'.catalogue .cat-prix{border-top:1px dashed #D5D2CA;padding-top:7px;margin-top:4px;}'
+      +'.catalogue .cat-prix-titre{font-size:10px;color:#8A919C;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}'
+      +'.catalogue[dir="rtl"] .cat-prix-titre{letter-spacing:0;}'
+      +'.catalogue .cat-prix-ligne{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}'
+      +'.catalogue .cat-prix-type{font-size:11.5px;color:#4A5260;}'
+      +'.catalogue .cat-prix-val{font-size:15px;font-weight:800;color:#E4202C;white-space:nowrap;}'
+      +'.catalogue .cat-palier{font-size:10.5px;color:#4A5260;padding-inline-start:10px;}'
+      +'.catalogue .cat-pied{margin-top:4px;background:#1F2B45;color:#E8EAEE;text-align:center;font-size:10.5px;line-height:1.7;padding:10px 30px;}'
+      +'.catalogue .cat-pied b{color:#fff;}';
+    return '<!DOCTYPE html><html lang="'+principale+'" dir="'+T.dir+'"><head><meta charset="UTF-8"><title>'+esc(opt.titre)+'</title>'
+      +'<style>@page{size:A4;margin:0;}html,body{margin:0;padding:0;background:#fff;}</style></head><body>'
+      +'<div class="catalogue" dir="'+T.dir+'"><style>'+css+'</style><div class="accent"></div>'
+      +'<div class="cat-head"><img src="'+LOGO_DATA_URI+'" alt=""><div class="cat-titre"><h1>'+esc(opt.titre)+'</h1>'
+      +'<div>'+esc(lbl("date"))+' '+ltr(dateTxt)+' · '+ltr(opt.produits.length+'')+' '+(principale==="ar"&&langs.length===1?'منتج':'produits')+'</div></div></div>'
+      +'<div class="cat-grille">'+rangees.join("")+'</div>'
+      +'<div class="cat-pied">'+langs.map(function(l){ return '<div dir="'+TXT_CAT[l].dir+'">'+esc(TXT_CAT[l].note)+'</div>'; }).join("")
+      +'<div><b>'+esc(s.raisonSociale||'EZPAC')+'</b>'+(contact?' — '+contact:'')+'</div></div>'
+      +'</div></body></html>';
+  }
+  // Fenêtre de préparation du catalogue
+  function titreCatalogueDefaut(langue){
+    var soc=(invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC", an=new Date().getFullYear();
+    return langue==="ar" ? "كتالوج "+soc+" "+an : langue==="bi" ? "Catalogue "+soc+" "+an+" · كتالوج" : "Catalogue "+soc+" "+an;
+  }
+  $("catLangue").addEventListener("change", function(){
+    var t=$("catTitre").value.trim();
+    if(!t || ["fr","ar","bi"].some(function(l){ return t===titreCatalogueDefaut(l); })) $("catTitre").value=titreCatalogueDefaut(this.value);
+  });
+  function ouvrirCatalogue(){
+    if(!products.length){ toast("Aucun produit dans le catalogue"); return; }
+    $("catTitre").value = $("catTitre").value || titreCatalogueDefaut($("catLangue").value);
+    var tries = products.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),"fr"); });
+    $("catProduits").innerHTML = tries.map(function(p){
+      var manque = [!p.photo?"photo":"", !p.nameAr?"nom arabe":"", (p.unitPrice==null||p.unitPrice==="")?"prix":""].filter(Boolean);
+      return '<label class="cat-choix"><input type="checkbox" value="'+esc(p.id)+'" checked> <span>'+esc(p.name)+(p.nameAr?' <span dir="rtl" class="hint">'+esc(p.nameAr)+'</span>':'')
+        +(manque.length?' <span class="hint" style="color:var(--danger);">— sans '+manque.join(", ")+'</span>':'')+'</span></label>';
+    }).join("");
+    $("catalogueOverlay").classList.add("open");
+  }
+  function optionsCatalogue(){
+    var ids = Array.prototype.filter.call($("catProduits").querySelectorAll("input[type=checkbox]"), function(c){ return c.checked; }).map(function(c){ return c.value; });
+    var ordre = products.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),"fr"); });
+    return { titre: $("catTitre").value.trim() || "Catalogue", langue: $("catLangue").value, prix: $("catPrix").value, paliers: $("catPaliers").checked,
+             produits: ordre.filter(function(p){ return ids.indexOf(String(p.id))!==-1; }) };
+  }
+  $("catalogueBtn").addEventListener("click", ouvrirCatalogue);
+  $("catAnnuler").addEventListener("click", function(){ $("catalogueOverlay").classList.remove("open"); });
+  $("catalogueOverlay").addEventListener("click", function(e){ if(e.target===this) this.classList.remove("open"); });
+  $("catToutCocher").addEventListener("click", function(){
+    var cases=$("catProduits").querySelectorAll("input[type=checkbox]"), tous=Array.prototype.every.call(cases, function(c){ return c.checked; });
+    Array.prototype.forEach.call(cases, function(c){ c.checked=!tous; });
+  });
+  $("catImprimer").addEventListener("click", function(){
+    var o=optionsCatalogue(); if(!o.produits.length){ toast("Cochez au moins un produit"); return; }
+    var w=window.open("","_blank"); if(!w){ toast("Autorisez les fenêtres pop-up pour imprimer."); return; }
+    w.document.open(); w.document.write(genererHtmlCatalogue(o)); w.document.close();
+    setTimeout(function(){ w.focus(); w.print(); }, 800);
+  });
+  $("catPdf").addEventListener("click", function(){
+    var o=optionsCatalogue(); if(!o.produits.length){ toast("Cochez au moins un produit"); return; }
+    telechargerPdfDepuisHtml(genererHtmlCatalogue(o), (o.titre.replace(/[^a-zA-Z0-9؀-ۿ]+/g,"-").replace(/^-|-$/g,"")||"catalogue")+"-"+o.langue+".pdf");
+  });
+
+  // Photo du produit (formulaire produit) : réduite puis envoyée dans l'espace de fichiers
+  var productPhoto="";
+  function afficherPhotoProduit(){
+    $("pPhotoApercu").innerHTML = productPhoto ? '<img src="'+esc(productPhoto)+'" alt="">' : '<span class="hint">Aucune photo</span>';
+    $("pPhotoRetirer").style.display = productPhoto ? "" : "none";
+  }
+  $("pPhotoBtn").addEventListener("click", function(){ $("pPhotoInput").value=""; $("pPhotoInput").click(); });
+  $("pPhotoRetirer").addEventListener("click", function(){ productPhoto=""; afficherPhotoProduit(); });
+  $("pPhotoInput").addEventListener("change", async function(){
+    var f=this.files && this.files[0]; if(!f) return;
+    var btn=$("pPhotoBtn"); btn.disabled=true; btn.textContent="Envoi…";
+    try{
+      var img=await imageReduite(f, 1200);
+      var res=await api({action:"uploadFile", filename:(f.name||"photo").replace(/\.[^.]+$/,"")+".jpg", mimeType:img.mime, data:img.data});
+      productPhoto=res.file.url; afficherPhotoProduit(); toast("Photo ajoutée — pensez à enregistrer le produit");
+    }catch(e){ toast("Échec de l'envoi de la photo : "+e.message); }
+    btn.disabled=false; btn.textContent="📷 Choisir une photo";
+  });
+
   function openProductModal(ex, dupliquer){
     editingProductId=(ex && !dupliquer)?ex.id:null;
     $("productModalTitle").textContent = dupliquer ? "Nouveau produit (à partir de « "+ex.name+" »)" : (ex?"Modifier le produit":"Nouveau produit");
@@ -2041,6 +2251,8 @@
     renderAchatPlainTiersEditor();
     productFournPrix = (ex && ex.supplierPrices) ? ex.supplierPrices.map(function(o){ return Object.assign({paliers:[], paliersSans:[]}, o); }) : [];
     renderFournPrixEditor();
+    productPhoto = (ex && ex.photo) || ""; afficherPhotoProduit();
+    $("pNameAr").value = (ex && ex.nameAr) || ""; $("pDescFr").value = (ex && ex.descFr) || ""; $("pDescAr").value = (ex && ex.descAr) || "";
     productPlainTiers = (ex && ex.plainTiers) ? ex.plainTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
     renderPlainTiersEditor();
     productAchatTiers = (ex && ex.purchaseTiers) ? ex.purchaseTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
@@ -2066,6 +2278,7 @@
       plainTiers: productPlainTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }),
       purchasePlainPrice: $("pPurchasePlainPrice").value!=="" ? Number($("pPurchasePlainPrice").value) : null,
       purchasePlainTiers: productAchatPlainTiers.filter(function(t){ return t.minQty>0 && t.unitPrice>=0; }),
+      photo: productPhoto || null, nameAr: $("pNameAr").value.trim(), descFr: $("pDescFr").value.trim(), descAr: $("pDescAr").value.trim(),
       supplierPrices: productFournPrix.filter(function(o){ return o.fournisseurId; }).map(function(o){
         return { fournisseurId:o.fournisseurId, fournisseurName:nomFournisseur(o.fournisseurId, o.fournisseurName),
           prix:o.prix, prixSans:o.prixSans, paliers:o.paliers||[], paliersSans:o.paliersSans||[], delai:o.delai||"", note:o.note||"", maj:new Date().toISOString() };
@@ -2624,11 +2837,11 @@
     toast("Génération du PDF…");
     function fin(){ if(iframe.parentNode) iframe.parentNode.removeChild(iframe); }
     setTimeout(function(){
-      var cible = idoc.body.querySelector(".ezdoc") || idoc.body;
+      var cible = idoc.body.querySelector(".ezdoc, .catalogue") || idoc.body;
       if(cible===idoc.body) idoc.body.style.width=LARGEUR+"px";
       // bas de chaque ligne de tableau : points de coupe possibles entre deux pages
       var haut=cible.getBoundingClientRect().top;
-      var coupes=Array.prototype.map.call(cible.querySelectorAll("tr, .bas, .sign"), function(el){ return (el.getBoundingClientRect().bottom-haut)*ECHELLE; });
+      var coupes=Array.prototype.map.call(cible.querySelectorAll(".catalogue .cat-row, .catalogue .cat-head, .ezdoc tr, .bas, .sign"), function(el){ return (el.getBoundingClientRect().bottom-haut)*ECHELLE; });
       html2canvas(cible, {scale:ECHELLE, useCORS:true, backgroundColor:"#ffffff", windowWidth:LARGEUR}).then(function(canvas){
         var pdf=new window.jspdf.jsPDF({unit:"px", format:[LARGEUR,HAUTEUR], orientation:"portrait", hotfixes:["px_scaling"]});
         var pageH=HAUTEUR*ECHELLE, y=0, premiere=true;
