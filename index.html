@@ -456,7 +456,7 @@
         </div>
       </div>
       <div id="pPhotoSiteChoix" style="display:none;margin-bottom:10px;"></div>
-      <div class="field"><label>Nom en arabe</label><input id="pNameAr" dir="rtl" placeholder="مثال: كيس بمقبض 30×40"></div>
+      <div class="field"><label>Nom en arabe <button type="button" class="btn btn-ghost btn-sm" id="pArSiteBtn" style="margin-left:6px;">🌐 Remplir depuis ezpac.ma</button></label><input id="pNameAr" dir="rtl" placeholder="مثال: كيس بمقبض 30×40"></div>
       <div class="field"><label>Description catalogue (français)</label><textarea id="pDescFr" rows="2" placeholder="Ex : Sac non tissé réutilisable, idéal pharmacies et boutiques."></textarea></div>
       <div class="field"><label>Description catalogue (arabe)</label><textarea id="pDescAr" rows="2" dir="rtl" placeholder="مثال: كيس غير منسوج قابل لإعادة الاستعمال"></textarea></div>
     </div>
@@ -518,7 +518,9 @@
   </div>
   <label class="cat-choix" style="border:0;"><input type="checkbox" id="catPaliers" checked> <span>Afficher les prix par quantité (paliers)</span></label>
   <div style="margin:6px 0 10px;"><button type="button" class="btn btn-ghost btn-sm" id="catPhotosSite" data-mut="1">🌐 Compléter les photos manquantes avec celles du site ezpac.ma</button>
-    <div class="hint" id="catPhotosStatut" style="margin-top:4px;"></div></div>
+    <div class="hint" id="catPhotosStatut" style="margin-top:4px;"></div>
+    <button type="button" class="btn btn-ghost btn-sm" id="catNomsArSite" data-mut="1" style="margin-top:6px;">🌐 Compléter les noms arabes et descriptions (textes du site ezpac.ma)</button>
+    <div class="hint" id="catNomsArStatut" style="margin-top:4px;"></div></div>
   <div class="field"><label>Produits <button type="button" class="btn btn-ghost btn-sm" id="catToutCocher" style="margin-left:6px;">Tout cocher / décocher</button></label>
     <div class="cat-liste" id="catProduits"></div>
     <div class="hint" style="margin-top:6px;">Ajoutez une photo, le nom en arabe et une courte description dans chaque fiche produit (section « Catalogue ») pour un catalogue complet.</div>
@@ -2451,6 +2453,59 @@
     if(/\banse|cabas|cousu|بيد/.test(n)) return "anse";
     return null;
   }
+  // Textes du site ezpac.ma (pages produits et page d'accueil en arabe)
+  var TEXTES_SITE = {
+    poigne:   { ar:"كيس بمقبض",   descAr:"كيس بمقبض مقصوص، مثالي للصيدليات والمحلات ومتاجر العطور.", descFr:"Sac découpé, idéal pour pharmacies, boutiques et parfumeries." },
+    anse:     { ar:"كيس بيد",     descAr:"بمقابض مخيطة، متين للتسوق والمعارض والهدايا.",              descFr:"Anses cousues, solide pour les courses, salons et cadeaux." },
+    bretelle: { ar:"كيس بحمالات", descAr:"البديل الاقتصادي للكيس البلاستيكي في المتاجر.",             descFr:"Le remplaçant économique du sac plastique pour les commerces." },
+    box:      { ar:"Premium Box",  descAr:"كيس واسع بقاعدة عريضة، للعلب والمموّنين والتجارة الإلكترونية.", descFr:"Sac cabas large à soufflet, pour coffrets, traiteurs et e-commerce." }
+  };
+  var TAILLES_AR = { petit:"صغير", moyen:"متوسط", grand:"كبير", small:"صغير", medium:"متوسط", large:"كبير" };
+  // Nom arabe = type du sac (vocabulaire du site) + dimensions (+ soufflet → « بقاعدة »)
+  function textesSitePourProduit(p){
+    var type=photoSitePourProduit(p); if(!type) return null;
+    var t=TEXTES_SITE[type], source=String((p.dimensions||"")+" "+(p.name||""));
+    var m=/(\d+(?:[.,]\d+)?)\s*[x×X]\s*(\d+(?:[.,]\d+)?)/.exec(source), sf=/soufflet\s*(\d+)|[x×X]\s*\d+\s*[x×X]\s*(\d+)/i.exec(source);
+    var nom=t.ar;
+    if(m) nom+=" "+m[1]+"×"+m[2];
+    if(sf) nom+=" بقاعدة "+(sf[1]||sf[2]);
+    if(!m){ var tl=/\b(petit|moyen|grand|small|medium|large)\b/i.exec(String(p.name||"")+" "+String(p.dimensions||"")); if(tl) nom+=" "+TAILLES_AR[tl[1].toLowerCase()]; }
+    return { nameAr:nom, descAr:t.descAr, descFr:t.descFr };
+  }
+  $("pArSiteBtn").addEventListener("click", function(){
+    var p={ name:$("pName").value.trim(), dimensions:$("pDimensions").value.trim() };
+    var tx=textesSitePourProduit(p);
+    if(!tx){ toast("Type de sac non reconnu dans le nom (poignée, anse, bretelles, box) : saisissez le nom arabe"); return; }
+    if($("pNameAr").value.trim() && $("pNameAr").value.trim()!==tx.nameAr && !confirm("Remplacer « "+$("pNameAr").value.trim()+" » par « "+tx.nameAr+" » ?")) return;
+    $("pNameAr").value=tx.nameAr;
+    if(!$("pDescAr").value.trim()) $("pDescAr").value=tx.descAr;
+    if(!$("pDescFr").value.trim()) $("pDescFr").value=tx.descFr;
+    toast("Textes du site ajoutés — pensez à enregistrer le produit");
+  });
+  $("catNomsArSite").addEventListener("click", async function(){
+    var aFaire = products.map(function(p){
+      var tx=textesSitePourProduit(p); if(!tx) return null;
+      var maj={ id:p.id };
+      if(!p.nameAr) maj.nameAr=tx.nameAr; if(!p.descAr) maj.descAr=tx.descAr; if(!p.descFr) maj.descFr=tx.descFr;
+      return Object.keys(maj).length>1 ? { p:p, maj:maj } : null;
+    }).filter(Boolean);
+    var nonReconnus = products.filter(function(p){ return !p.nameAr && !textesSitePourProduit(p); });
+    if(!aFaire.length){ $("catNomsArStatut").textContent = nonReconnus.length ? nonReconnus.length+" produit(s) sans nom arabe non reconnu(s) : saisissez leur nom dans la fiche." : "Tous les produits ont déjà leurs textes."; return; }
+    if(!confirm(aFaire.length+" produit(s) vont recevoir les textes du site ezpac.ma (seulement les champs vides) :\n\n"
+      +aFaire.map(function(x){ return "• "+x.p.name+(x.maj.nameAr?" → "+x.maj.nameAr:""); }).join("\n")+"\n\nContinuer ?")) return;
+    var btn=this; btn.disabled=true; var faits=0;
+    try{
+      for(var i=0;i<aFaire.length;i++){
+        $("catNomsArStatut").textContent="Textes… "+(i+1)+" / "+aFaire.length;
+        await api({action:"saveProduct", product:aFaire[i].maj});
+        Object.assign(aFaire[i].p, aFaire[i].maj); faits++;
+      }
+      $("catNomsArStatut").textContent="✅ "+faits+" produit(s) complété(s)."+(nonReconnus.length?" "+nonReconnus.length+" non reconnu(s) : nom arabe à saisir dans la fiche.":"");
+      await refresh(); ouvrirCatalogue();
+    }catch(err){ $("catNomsArStatut").textContent="Échec : "+err.message+" ("+faits+" produit(s) complété(s))"; }
+    btn.disabled=false;
+  });
+
   $("pPhotoSiteBtn").addEventListener("click", function(){
     var el=$("pPhotoSiteChoix");
     if(el.style.display!=="none"){ el.style.display="none"; return; }
