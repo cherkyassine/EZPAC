@@ -142,6 +142,8 @@
   .photo-apercu{width:120px;height:120px;border:1px solid var(--line);border-radius:10px;background:var(--paper);display:flex;align-items:center;justify-content:center;overflow:hidden;}
   .photo-apercu img{max-width:100%;max-height:100%;object-fit:contain;}
   .cat-choix{display:flex;gap:8px;align-items:flex-start;padding:5px 2px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;}
+  .cat-choix input[type=checkbox]{width:auto !important;flex:none;margin:3px 0 0;padding:0;}
+  .cat-choix span{flex:1;text-align:start;}
   .cat-liste{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 10px;background:var(--paper);}
   .produit-photo{width:100%;max-height:220px;object-fit:contain;border:1px solid var(--line);border-radius:12px;background:var(--paper);margin-bottom:12px;}
   .fp-row{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--paper);}
@@ -2197,7 +2199,7 @@
     var tries = products.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),"fr",{numeric:true}); });
     $("catProduits").innerHTML = tries.map(function(p){
       var manque = [!p.photo?"photo":"", !p.nameAr?"nom arabe":"", (p.unitPrice==null||p.unitPrice==="")?"prix":""].filter(Boolean);
-      return '<label class="cat-choix"><input type="checkbox" value="'+esc(p.id)+'" checked> <span>'+esc(p.name)+(p.nameAr?' <span dir="rtl" class="hint">'+esc(p.nameAr)+'</span>':'')
+      return '<label class="cat-choix"><input type="checkbox" value="'+esc(p.id)+'" checked> <span>'+esc(p.name)+(p.nameAr?' <span dir="rtl" class="hint">'+escDims(p.nameAr)+'</span>':'')
         +(manque.length?' <span class="hint" style="color:var(--danger);">— sans '+manque.join(", ")+'</span>':'')+'</span></label>';
     }).join("");
     $("catalogueOverlay").classList.add("open");
