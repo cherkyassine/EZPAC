@@ -448,10 +448,12 @@
         <div class="photo-apercu" id="pPhotoApercu"></div>
         <div style="display:flex;flex-direction:column;gap:6px;">
           <button type="button" class="btn btn-ghost btn-sm" id="pPhotoBtn">📷 Choisir une photo</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="pPhotoSiteBtn">🌐 Photo du site ezpac.ma</button>
           <button type="button" class="btn btn-ghost btn-sm" id="pPhotoRetirer" style="display:none;">✕ Retirer la photo</button>
           <input type="file" id="pPhotoInput" accept="image/*" style="display:none;">
         </div>
       </div>
+      <div id="pPhotoSiteChoix" style="display:none;margin-bottom:10px;"></div>
       <div class="field"><label>Nom en arabe</label><input id="pNameAr" dir="rtl" placeholder="مثال: كيس بمقبض 30×40"></div>
       <div class="field"><label>Description catalogue (français)</label><textarea id="pDescFr" rows="2" placeholder="Ex : Sac non tissé réutilisable, idéal pharmacies et boutiques."></textarea></div>
       <div class="field"><label>Description catalogue (arabe)</label><textarea id="pDescAr" rows="2" dir="rtl" placeholder="مثال: كيس غير منسوج قابل لإعادة الاستعمال"></textarea></div>
@@ -513,9 +515,23 @@
     <div class="field"><label>Prix affichés</label><select id="catPrix"><option value="tous">Imprimé + sans impression</option><option value="imprime">Imprimé seulement</option><option value="sans">Sans impression seulement</option><option value="aucun">Sans prix</option></select></div>
   </div>
   <label class="cat-choix" style="border:0;"><input type="checkbox" id="catPaliers" checked> <span>Afficher les prix par quantité (paliers)</span></label>
+  <div style="margin:6px 0 10px;"><button type="button" class="btn btn-ghost btn-sm" id="catPhotosSite" data-mut="1">🌐 Compléter les photos manquantes avec celles du site ezpac.ma</button>
+    <div class="hint" id="catPhotosStatut" style="margin-top:4px;"></div></div>
   <div class="field"><label>Produits <button type="button" class="btn btn-ghost btn-sm" id="catToutCocher" style="margin-left:6px;">Tout cocher / décocher</button></label>
     <div class="cat-liste" id="catProduits"></div>
     <div class="hint" style="margin-top:6px;">Ajoutez une photo, le nom en arabe et une courte description dans chaque fiche produit (section « Catalogue ») pour un catalogue complet.</div>
+  </div>
+  <div class="field" style="border-top:1px solid var(--line);padding-top:12px;">
+    <label>📱 Une seule image pour les réseaux sociaux (tous les produits cochés sur une page)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <select id="catFormatSocial" style="flex:1;min-width:200px;">
+        <option value="1080x1350">Portrait 1080×1350 — Instagram / Facebook (conseillé)</option>
+        <option value="1080x1080">Carré 1080×1080 — publication</option>
+        <option value="1080x1920">Story 1080×1920 — story / statut WhatsApp</option>
+      </select>
+      <button type="button" class="btn btn-gold btn-sm" id="catSocial">🖼 Télécharger l'image</button>
+    </div>
+    <div class="hint" id="catSocialStatut" style="margin-top:6px;">Conseil : 4 à 12 produits par image restent bien lisibles sur téléphone.</div>
   </div>
   <div class="modal-actions">
     <button type="button" class="btn btn-ghost" id="catAnnuler">Fermer</button>
@@ -2149,8 +2165,7 @@
       +'.catalogue .cat-specs th{text-align:start;font-weight:600;color:#6B7380;font-size:10.5px;padding:2px 0;padding-inline-end:10px;white-space:nowrap;vertical-align:top;width:1%;}'
       +'.catalogue .cat-specs td{font-size:11.5px;padding:2px 0;}'
       +'.catalogue .cat-prix{border-top:1px dashed #D5D2CA;padding-top:7px;margin-top:4px;}'
-      +'.catalogue .cat-prix-titre{font-size:10px;color:#8A919C;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}'
-      +'.catalogue[dir="rtl"] .cat-prix-titre{letter-spacing:0;}'
+      +'.catalogue .cat-prix-titre{font-size:10.5px;color:#8A919C;margin-bottom:4px;}'
       +'.catalogue .cat-prix-ligne{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}'
       +'.catalogue .cat-prix-type{font-size:11.5px;color:#4A5260;}'
       +'.catalogue .cat-prix-val{font-size:15px;font-weight:800;color:#E4202C;white-space:nowrap;}'
@@ -2179,7 +2194,7 @@
   function ouvrirCatalogue(){
     if(!products.length){ toast("Aucun produit dans le catalogue"); return; }
     $("catTitre").value = $("catTitre").value || titreCatalogueDefaut($("catLangue").value);
-    var tries = products.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),"fr"); });
+    var tries = products.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),"fr",{numeric:true}); });
     $("catProduits").innerHTML = tries.map(function(p){
       var manque = [!p.photo?"photo":"", !p.nameAr?"nom arabe":"", (p.unitPrice==null||p.unitPrice==="")?"prix":""].filter(Boolean);
       return '<label class="cat-choix"><input type="checkbox" value="'+esc(p.id)+'" checked> <span>'+esc(p.name)+(p.nameAr?' <span dir="rtl" class="hint">'+esc(p.nameAr)+'</span>':'')
@@ -2189,7 +2204,7 @@
   }
   function optionsCatalogue(){
     var ids = Array.prototype.filter.call($("catProduits").querySelectorAll("input[type=checkbox]"), function(c){ return c.checked; }).map(function(c){ return c.value; });
-    var ordre = products.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),"fr"); });
+    var ordre = products.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),"fr",{numeric:true}); });
     return { titre: $("catTitre").value.trim() || "Catalogue", langue: $("catLangue").value, prix: $("catPrix").value, paliers: $("catPaliers").checked,
              produits: ordre.filter(function(p){ return ids.indexOf(String(p.id))!==-1; }) };
   }
@@ -2209,6 +2224,151 @@
   $("catPdf").addEventListener("click", function(){
     var o=optionsCatalogue(); if(!o.produits.length){ toast("Cochez au moins un produit"); return; }
     telechargerPdfDepuisHtml(genererHtmlCatalogue(o), (o.titre.replace(/[^a-zA-Z0-9؀-ۿ]+/g,"-").replace(/^-|-$/g,"")||"catalogue")+"-"+o.langue+".pdf");
+  });
+
+  // ---------- Catalogue en une seule image (réseaux sociaux) ----------
+  // Grille calculée pour que tous les produits tiennent sur une page, cartes aussi grandes que possible
+  function grilleSociale(n, largeur, hauteur, ecart){
+    var meilleure=null;
+    for(var c=1;c<=6;c++){
+      var r=Math.ceil(n/c), w=(largeur-(c-1)*ecart)/c, h=(hauteur-(r-1)*ecart)/r;
+      var taille=Math.min(w, h*0.78); // cartes un peu plus hautes que larges
+      if(!meilleure || taille>meilleure.taille+0.5) meilleure={cols:c, rows:r, w:w, h:h, taille:taille};
+    }
+    return meilleure;
+  }
+  function numeroWhatsapp(s){
+    var m=/whats\s*app[^+\d]*([+\d][\d\s.-]{7,})/i.exec(String(s.telephone||""));
+    return m ? m[1].trim() : "+212 7 08 03 23 27";
+  }
+  function genererHtmlSocial(opt, W, H){
+    var s=invoiceSettings||{}, langs = opt.langue==="bi" ? ["fr","ar"] : [opt.langue], principale=langs[0], dir=TXT_CAT[principale].dir;
+    var COURT = { fr:{imprime:"Imprimé", sans:"Sans impression"}, ar:{imprime:"مطبوع", sans:"بدون طباعة"} };
+    var lbl = function(cle){ return langs.map(function(l){ return (COURT[l][cle]) || TXT_CAT[l][cle]; }).join(" · "); };
+    var pad=Math.round(W*0.045), enTete=Math.round(H*(H>W*1.5?0.12:0.14)), pied=Math.round(H*(H>W*1.5?0.075:0.09)), ecart=Math.round(W*0.022);
+    var g=grilleSociale(opt.produits.length, W-2*pad, H-enTete-pied-2*ecart, ecart);
+    var fsNom=Math.max(13, Math.min(34, g.w*0.07)), fsPrix=Math.max(15, Math.min(44, g.w*0.095)), fsPetit=Math.max(10, Math.min(24, g.w*0.05));
+    var bilingue = langs.length>1;
+    var prixCarte = function(p){
+      if(opt.prix==="aucun") return "";
+      var types = opt.prix==="tous" ? [["imprime",false],["sans",true]] : [[opt.prix, opt.prix==="sans"]];
+      return types.map(function(k){
+        var px=prixCatalogue(p, k[1]); if(px.base==null && !px.paliers.length) return "";
+        var mini = px.paliers.length ? px.paliers[px.paliers.length-1] : null;
+        return '<div class="s-prix"><span class="s-type">'+esc(lbl(k[0]))+'</span><span class="s-val">'+(px.base!=null?ltr(mt(px.base)+' MAD'):'')+'</span></div>'
+          +(opt.paliers && mini ? '<div class="s-des">'+esc(lbl("des"))+' '+ltr(nf(mini.minQty))+' : <b>'+ltr(mt(mini.unitPrice)+' MAD')+'</b></div>' : '');
+      }).join("");
+    };
+    var cartes = opt.produits.map(function(p){
+      var noms = langs.map(function(l){ var nom = l==="ar" ? (p.nameAr||p.name) : p.name; return '<div class="s-nom" dir="'+TXT_CAT[l].dir+'">'+escDims(nom)+'</div>'; }).join("");
+      return '<div class="s-carte"><div class="s-photo">'+(p.photo?'<img src="'+esc(p.photo)+'" crossorigin="anonymous" alt="">':'<span>'+esc(lbl("sansPhoto"))+'</span>')+'</div>'
+        +'<div class="s-texte">'+noms+(p.dimensions && !bilingue ? '<div class="s-dim">'+ltr(p.dimensions)+(p.grammage?' · '+ltr(p.grammage):'')+'</div>' : '')+prixCarte(p)+'</div></div>';
+    }).join("");
+    var site = String(s.siteWeb||"ezpac.ma").replace(/^https?:\/\//,'').replace(/\/$/,'');
+    var appel = { fr:"Devis gratuit", ar:"عرض سعر مجاني" };
+    var css = ''
+      +'.social{box-sizing:border-box;width:'+W+'px;height:'+H+'px;overflow:hidden;background:#FAF8F5;color:#1B1E24;font-family:"Segoe UI",Arial,Helvetica,sans-serif;display:flex;flex-direction:column;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.social[dir="rtl"]{font-family:Tahoma,"Segoe UI",Arial,sans-serif;}'
+      +'.social *{box-sizing:border-box;}'
+      +'.social .s-accent{height:'+Math.round(W*0.012)+'px;flex:none;background:linear-gradient(90deg,#E4202C 0 25%,#F29100 25% 50%,#00A3C7 50% 75%,#1F2B45 75% 100%);}'
+      +'.social .s-tete{height:'+enTete+'px;flex:none;display:flex;align-items:center;justify-content:space-between;gap:'+pad+'px;padding:0 '+pad+'px;}'
+      +'.social .s-tete img{height:'+Math.round(enTete*0.62)+'px;width:auto;}'
+      +'.social .s-titre{font-size:'+Math.round(enTete*0.26)+'px;font-weight:800;color:#1F2B45;text-align:end;line-height:1.15;}'
+      +'.social .s-grille{flex:1;display:grid;grid-template-columns:repeat('+g.cols+',1fr);grid-template-rows:repeat('+g.rows+','+Math.floor(g.h)+'px);gap:'+ecart+'px;padding:'+ecart+'px '+pad+'px;align-content:center;}'
+      +'.social .s-carte{background:#fff;border-radius:'+Math.round(g.w*0.06)+'px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 10px rgba(31,43,69,.10);}'
+      +'.social .s-photo{flex:1 1 55%;min-height:0;background:#F1EFEA;display:flex;align-items:center;justify-content:center;padding:'+Math.round(g.w*0.04)+'px;}'
+      +'.social .s-photo img{max-width:100%;max-height:100%;object-fit:contain;display:block;}'
+      +'.social .s-photo span{color:#9AA1AA;font-size:'+fsPetit+'px;}'
+      +'.social .s-texte{flex:none;padding:'+Math.round(g.w*0.05)+'px '+Math.round(g.w*0.06)+'px '+Math.round(g.w*0.06)+'px;}'
+      +'.social .s-nom{font-size:'+fsNom.toFixed(1)+'px;font-weight:800;color:#1F2B45;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      +'.social .s-nom[dir="rtl"]{text-align:right;}'
+      +'.social .s-dim{font-size:'+fsPetit.toFixed(1)+'px;color:#6B7380;margin-top:2px;}'
+      +'.social .s-prix{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-top:'+Math.round(fsPetit*0.35)+'px;}'
+      +'.social .s-type{font-size:'+fsPetit.toFixed(1)+'px;color:#4A5260;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      +'.social .s-val{font-size:'+fsPrix.toFixed(1)+'px;font-weight:900;color:#E4202C;white-space:nowrap;}'
+      +'.social .s-des{font-size:'+fsPetit.toFixed(1)+'px;color:#1C9954;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      +'.social .s-pied{height:'+pied+'px;flex:none;background:#1F2B45;color:#fff;display:flex;align-items:center;justify-content:center;gap:'+Math.round(pad*0.7)+'px;font-size:'+Math.round(Math.min(pied*0.23, W*0.025))+'px;font-weight:700;padding:0 '+pad+'px;flex-wrap:wrap;row-gap:'+Math.round(pied*0.08)+'px;text-align:center;}'
+      +'.social .s-pied > span{white-space:nowrap;}'
+      +'.social .s-pied .s-cta{background:#E4202C;border-radius:999px;padding:'+Math.round(pied*0.1)+'px '+Math.round(pied*0.35)+'px;}';
+    return '<!DOCTYPE html><html lang="'+principale+'" dir="'+dir+'"><head><meta charset="UTF-8"><title>'+esc(opt.titre)+'</title>'
+      +'<style>html,body{margin:0;padding:0;}</style></head><body>'
+      +'<div class="social" dir="'+dir+'"><style>'+css+'</style><div class="s-accent"></div>'
+      +'<div class="s-tete"><img src="'+LOGO_DATA_URI+'" alt=""><div class="s-titre">'+esc(opt.titre)+'</div></div>'
+      +'<div class="s-grille">'+cartes+'</div>'
+      +'<div class="s-pied"><span>💬 WhatsApp '+ltr(numeroWhatsapp(s))+'</span><span>🌐 '+esc(site)+'</span>'
+      +'<span class="s-cta">'+esc(langs.map(function(l){ return appel[l]; }).join(" · "))+'</span></div>'
+      +'</div></body></html>';
+  }
+  $("catSocial").addEventListener("click", function(){
+    var o=optionsCatalogue(); if(!o.produits.length){ toast("Cochez au moins un produit"); return; }
+    var dims=$("catFormatSocial").value.split("x"), W=Number(dims[0]), H=Number(dims[1]);
+    if(o.produits.length>20 && !confirm(o.produits.length+" produits sur une seule image : ils seront petits et difficiles à lire sur téléphone. Continuer ?")) return;
+    var btn=this; btn.disabled=true; $("catSocialStatut").textContent="Création de l'image…";
+    var iframe=document.createElement("iframe");
+    iframe.style.cssText="position:fixed;left:-99999px;top:0;width:"+W+"px;height:"+H+"px;border:0;";
+    document.body.appendChild(iframe);
+    var idoc=iframe.contentDocument; idoc.open(); idoc.write(genererHtmlSocial(o, W, H)); idoc.close();
+    var fin=function(){ if(iframe.parentNode) iframe.parentNode.removeChild(iframe); btn.disabled=false; };
+    setTimeout(function(){
+      capturerPourPdf(idoc.querySelector(".social"), 1, W).then(function(canvas){
+        canvas.toBlob(function(blob){
+          var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+          a.download=(o.titre.replace(/[^a-zA-Z0-9\u0600-\u06FF]+/g,"-").replace(/^-|-$/g,"")||"catalogue")+"-"+W+"x"+H+".jpg";
+          document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+          $("catSocialStatut").textContent="✅ Image "+W+"×"+H+" téléchargée ("+o.produits.length+" produits). Publiez-la sur Instagram, Facebook ou en statut WhatsApp.";
+          fin();
+        }, "image/jpeg", 0.92);
+      }).catch(function(e){ $("catSocialStatut").textContent="Échec : "+(e&&e.message||e); fin(); });
+    }, 500);
+  });
+
+  // Photos des sacs du site ezpac.ma (copiées dans l'espace de fichiers par le serveur)
+  var PHOTOS_SITE = [["poigne","Sac à poignée"],["anse","Sac à anse"],["bretelle","Sac à bretelles"],["box","Premium Box"]];
+  var URL_PHOTOS_SITE = "http://ezpac.ma/images/";
+  var photosSiteImportees = {}; // une seule copie par photo et par session
+  function importerPhotoSite(cle){
+    if(photosSiteImportees[cle]) return Promise.resolve(photosSiteImportees[cle]);
+    return api({action:"importerPhotoSite", url:URL_PHOTOS_SITE+cle+".png"}).then(function(res){ photosSiteImportees[cle]=res.file.url; return res.file.url; });
+  }
+  // Type de sac d'après le nom du produit
+  function photoSitePourProduit(p){
+    var n=String((p.name||"")+" "+(p.nameAr||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    if(/poign|d-?cut|decoup|مقبض/.test(n)) return "poigne";
+    if(/bretelle|t-?shirt|debardeur|حمالات/.test(n)) return "bretelle";
+    if(/\bbox\b|boite|premium/.test(n)) return "box";
+    if(/\banse|cabas|cousu|بيد/.test(n)) return "anse";
+    return null;
+  }
+  $("pPhotoSiteBtn").addEventListener("click", function(){
+    var el=$("pPhotoSiteChoix");
+    if(el.style.display!=="none"){ el.style.display="none"; return; }
+    el.innerHTML='<div class="hint" style="margin-bottom:6px;">Choisissez la photo du site à utiliser :</div><div style="display:flex;gap:8px;flex-wrap:wrap;">'
+      +PHOTOS_SITE.map(function(x){ return '<button type="button" class="btn btn-ghost btn-sm" data-photo-site="'+x[0]+'">'+esc(x[1])+'</button>'; }).join("")+'</div>';
+    el.style.display="block";
+  });
+  $("pPhotoSiteChoix").addEventListener("click", function(e){
+    var cle=e.target.getAttribute("data-photo-site"); if(!cle) return;
+    e.target.disabled=true; e.target.textContent="Copie…";
+    importerPhotoSite(cle).then(function(url){ productPhoto=url; afficherPhotoProduit(); $("pPhotoSiteChoix").style.display="none"; toast("Photo du site ajoutée — pensez à enregistrer le produit"); })
+      .catch(function(err){ toast("Échec : "+err.message); e.target.disabled=false; });
+  });
+  $("catPhotosSite").addEventListener("click", async function(){
+    var sans=products.filter(function(p){ return !p.photo; });
+    var aTraiter=sans.map(function(p){ return {p:p, cle:photoSitePourProduit(p)}; }).filter(function(x){ return x.cle; });
+    if(!aTraiter.length){ $("catPhotosStatut").textContent = sans.length ? "Aucun produit sans photo n'a été reconnu (poignée, anse, bretelles, box) : ajoutez la photo dans sa fiche." : "Tous les produits ont déjà une photo."; return; }
+    if(!confirm(aTraiter.length+" produit(s) sans photo vont recevoir la photo correspondante du site ezpac.ma :\n\n"+aTraiter.map(function(x){ return "• "+x.p.name; }).join("\n")+"\n\nContinuer ?")) return;
+    var btn=this; btn.disabled=true; var faits=0;
+    try{
+      for(var i=0;i<aTraiter.length;i++){
+        $("catPhotosStatut").textContent="Photos… "+(i+1)+" / "+aTraiter.length;
+        var url=await importerPhotoSite(aTraiter[i].cle);
+        await api({action:"saveProduct", product:{id:aTraiter[i].p.id, photo:url}});
+        aTraiter[i].p.photo=url; faits++;
+      }
+      $("catPhotosStatut").textContent="✅ "+faits+" photo(s) ajoutée(s)."+(sans.length>aTraiter.length?" "+(sans.length-aTraiter.length)+" produit(s) non reconnu(s) : ajoutez leur photo dans la fiche.":"");
+      await refresh(); ouvrirCatalogue();
+    }catch(err){ $("catPhotosStatut").textContent="Échec : "+err.message+" ("+faits+" photo(s) ajoutée(s))"; }
+    btn.disabled=false;
   });
 
   // Photo du produit (formulaire produit) : réduite puis envoyée dans l'espace de fichiers
@@ -2251,7 +2411,7 @@
     renderAchatPlainTiersEditor();
     productFournPrix = (ex && ex.supplierPrices) ? ex.supplierPrices.map(function(o){ return Object.assign({paliers:[], paliersSans:[]}, o); }) : [];
     renderFournPrixEditor();
-    productPhoto = (ex && ex.photo) || ""; afficherPhotoProduit();
+    productPhoto = (ex && ex.photo) || ""; afficherPhotoProduit(); $("pPhotoSiteChoix").style.display="none";
     $("pNameAr").value = (ex && ex.nameAr) || ""; $("pDescFr").value = (ex && ex.descFr) || ""; $("pDescAr").value = (ex && ex.descAr) || "";
     productPlainTiers = (ex && ex.plainTiers) ? ex.plainTiers.map(function(t){return {minQty:t.minQty,unitPrice:t.unitPrice};}) : [];
     renderPlainTiersEditor();
@@ -2723,7 +2883,7 @@
 
     var lignesHtml = lignes.map(function(l,i){
       var q = l.quantity!=null?l.quantity:l.quantite, pu = l.unitPrice!=null?l.unitPrice:l.prixUnitaire;
-      return '<tr><td class="c">'+(i+1)+'</td><td>'+esc(l.designation)+'</td><td class="c">'+esc(q)+'</td>'
+      return '<tr><td class="c">'+(i+1)+'</td><td>'+escDims(l.designation)+'</td><td class="c">'+esc(q)+'</td>'
         +(avecPrix?'<td class="r">'+mt(pu)+'</td><td class="r b">'+mt(l.total)+'</td>':'')+'</tr>';
     }).join("");
 
@@ -2825,6 +2985,29 @@
     w.document.open(); w.document.write(html); w.document.close();
     setTimeout(function(){ w.focus(); w.print(); },300);
   }
+  // Images du document converties en données intégrées (nécessaire au rendu par le navigateur)
+  function integrerImages(doc){
+    return Promise.all(Array.prototype.map.call(doc.images, function(im){
+      if(!im.src || im.src.indexOf("data:")===0) return null;
+      return fetch(im.src, {mode:"cors"}).then(function(r){ if(!r.ok) throw 0; return r.blob(); }).then(function(b){
+        return new Promise(function(ok){ var fr=new FileReader(); fr.onload=function(){ im.src=fr.result; ok(); }; fr.onerror=function(){ ok(); }; fr.readAsDataURL(b); });
+      }).catch(function(){ /* image non lisible : laissée telle quelle */ });
+    })).then(function(){ return new Promise(function(ok){ setTimeout(ok, 150); }); });
+  }
+  // 1er essai : le navigateur dessine lui-même le texte (arabe, accents, sens de lecture corrects).
+  // Si le navigateur ne le permet pas, ancien mode de capture.
+  function capturerPourPdf(cible, echelle, largeur){
+    var classique = function(){ return html2canvas(cible, {scale:echelle, useCORS:true, backgroundColor:"#ffffff", windowWidth:largeur}); };
+    // délai maximal : si le rendu par le navigateur n'aboutit pas (onglet en arrière-plan, navigateur lent…), ancien mode
+    var delai = function(ms){ return new Promise(function(_, non){ setTimeout(function(){ non(new Error("délai dépassé")); }, ms); }); };
+    return Promise.race([integrerImages(cible.ownerDocument), delai(15000)]).then(function(){
+      return Promise.race([html2canvas(cible, {scale:echelle, useCORS:true, backgroundColor:"#ffffff", windowWidth:largeur, foreignObjectRendering:true}), delai(20000)]);
+    }).then(function(canvas){
+      canvas.getContext("2d").getImageData(0,0,1,1); canvas.toDataURL("image/jpeg",0.1); // vérifie que la capture est exploitable
+      if(canvas.width<10 || canvas.height<10) throw new Error("capture vide");
+      return canvas;
+    }).catch(function(){ return classique(); });
+  }
   // PDF A4 : capture directe du document (html2canvas) puis découpe en pages entre les lignes du tableau
   function telechargerPdfDepuisHtml(html, filename){
     if(typeof html2canvas === "undefined" || !window.jspdf){ toast("Téléchargement PDF indisponible (bibliothèque non chargée)"); return; }
@@ -2842,7 +3025,7 @@
       // bas de chaque ligne de tableau : points de coupe possibles entre deux pages
       var haut=cible.getBoundingClientRect().top;
       var coupes=Array.prototype.map.call(cible.querySelectorAll(".catalogue .cat-row, .catalogue .cat-head, .ezdoc tr, .bas, .sign"), function(el){ return (el.getBoundingClientRect().bottom-haut)*ECHELLE; });
-      html2canvas(cible, {scale:ECHELLE, useCORS:true, backgroundColor:"#ffffff", windowWidth:LARGEUR}).then(function(canvas){
+      capturerPourPdf(cible, ECHELLE, LARGEUR).then(function(canvas){
         var pdf=new window.jspdf.jsPDF({unit:"px", format:[LARGEUR,HAUTEUR], orientation:"portrait", hotfixes:["px_scaling"]});
         var pageH=HAUTEUR*ECHELLE, y=0, premiere=true;
         while(y < canvas.height-2){
