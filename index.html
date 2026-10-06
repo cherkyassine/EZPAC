@@ -571,9 +571,14 @@
     <div class="field"><label>Transporteur *</label><select id="eTransporteur" required></select></div>
     <div class="field-row">
       <div class="field"><label>N° de suivi</label><input id="eTracking" placeholder="Optionnel"></div>
-      <div class="field"><label>Nombre de colis</label><input id="eColis" type="number" step="1" min="1" value="1"></div>
+      <div class="field"><label>Nombre de colis (1 étiquette par colis)</label><input id="eColis" type="number" step="1" min="1" max="200" value="1"></div>
     </div>
-    <div class="field"><label>Poids total (kg)</label><input id="ePoids" type="number" step="0.1" placeholder="Optionnel"></div>
+    <div class="field">
+      <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;">Contenu de chaque colis
+        <button type="button" class="btn btn-ghost btn-sm" id="eRepartir" title="Remplir à partir des produits de la commande">↻ Répartir les produits</button></label>
+      <div id="eColisListe" style="max-height:46vh;overflow:auto;"></div>
+      <div class="hint" id="ePoidsTotal"></div>
+    </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="cancelEtiquetteBtn">Annuler</button>
       <button type="submit" class="btn btn-primary" id="saveEtiquetteBtn">Générer</button>
@@ -2918,16 +2923,67 @@
     var sel=$("eTransporteur");
     if(!transporteurs.length){ toast("Ajoutez d'abord un transporteur dans l'onglet Transporteurs"); return; }
     sel.innerHTML = transporteurs.map(function(t){ return '<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>'; }).join("");
-    $("eTracking").value=""; $("eColis").value="1"; $("ePoids").value="";
+    $("eTracking").value=""; $("eColis").value="1";
+    etqColis=[];
+    repartirProduitsColis(1);
     $("etiquetteOverlay").classList.add("open");
   }
+  // Contenu des colis : produits de la commande répartis à parts égales (modifiable)
+  var etqColis=[];
+  function lignesProduitsCommande(orderId){
+    var o=orders.find(function(x){ return String(x.id)===String(orderId); });
+    return o ? lignesDeCommande(o).filter(function(l){ return !estSpeciale(l) && l.designation && Number(l.quantity)>0; }) : [];
+  }
+  function repartirProduitsColis(n){
+    var lignes=lignesProduitsCommande(etiquetteOrderId);
+    var anciens=etqColis; etqColis=[];
+    for(var i=0;i<n;i++){
+      var contenu=lignes.map(function(l){
+        var q=Math.floor(Number(l.quantity)), base=Math.floor(q/n), reste=q%n, qi=base+(i<reste?1:0);
+        return qi>0 ? "• "+l.designation+" — "+nf(qi)+" pcs" : "";
+      }).filter(Boolean).join("\n");
+      etqColis.push({ contenu:contenu, poids:(anciens[i]&&anciens[i].poids)||"" });
+    }
+    dessinerColis();
+  }
+  function dessinerColis(){
+    var n=etqColis.length;
+    $("eColisListe").innerHTML=etqColis.map(function(c,i){
+      return '<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;"><strong>📦 Colis '+(i+1)+' / '+n+'</strong>'
+        +'<span style="display:flex;align-items:center;gap:4px;font-size:12px;">Poids <input data-colis-poids="'+i+'" type="number" step="0.1" min="0" value="'+esc(c.poids)+'" placeholder="—" style="width:80px;"> kg</span></div>'
+        +'<textarea data-colis-contenu="'+i+'" rows="'+Math.min(6,Math.max(2,(c.contenu.match(/\n/g)||[]).length+1))+'" placeholder="Contenu du colis (optionnel)">'+esc(c.contenu)+'</textarea></div>';
+    }).join("");
+    majPoidsTotal();
+  }
+  function majPoidsTotal(){
+    var avec=etqColis.filter(function(c){ return String(c.poids).trim()!=="" && !isNaN(Number(c.poids)); });
+    var total=avec.reduce(function(a,c){ return a+Number(c.poids); },0);
+    $("ePoidsTotal").textContent = avec.length ? "Poids total : "+nf(Math.round(total*100)/100)+" kg"+(avec.length<etqColis.length?" ("+avec.length+" colis pesés sur "+etqColis.length+")":"") : "Poids : optionnel, à indiquer par colis.";
+  }
+  $("eColisListe").addEventListener("input", function(e){
+    var i=e.target.getAttribute("data-colis-contenu"), j=e.target.getAttribute("data-colis-poids");
+    if(i!=null) etqColis[i].contenu=e.target.value;
+    if(j!=null){ etqColis[j].poids=e.target.value; majPoidsTotal(); }
+  });
+  $("eColis").addEventListener("change", function(){
+    var n=Math.max(1, Math.min(200, Math.floor(Number(this.value))||1)); this.value=n;
+    if(n!==etqColis.length) repartirProduitsColis(n);
+  });
+  $("eRepartir").addEventListener("click", function(){
+    if(!lignesProduitsCommande(etiquetteOrderId).length){ toast("Cette commande n'a pas de produits enregistrés"); return; }
+    repartirProduitsColis(etqColis.length||1);
+  });
   $("cancelEtiquetteBtn").addEventListener("click", function(){ $("etiquetteOverlay").classList.remove("open"); });
   $("etiquetteOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
   $("etiquetteForm").addEventListener("submit", function(e){
     e.preventDefault();
     var btn=$("saveEtiquetteBtn"); btn.disabled=true; btn.textContent="Génération…";
+    var pesés=etqColis.filter(function(c){ return String(c.poids).trim()!=="" && !isNaN(Number(c.poids)); });
+    var poidsTotal = pesés.length ? String(Math.round(pesés.reduce(function(a,c){ return a+Number(c.poids); },0)*100)/100) : "";
     api({action:"genererEtiquette", orderId:etiquetteOrderId, transporteurId:$("eTransporteur").value,
-      trackingNumber:$("eTracking").value.trim(), colis:Number($("eColis").value)||1, poids:$("ePoids").value.trim()})
+      trackingNumber:$("eTracking").value.trim(), colis:etqColis.length||1, poids:poidsTotal,
+      colisDetails:etqColis.map(function(c){ return { contenu:String(c.contenu||"").trim(), poids:String(c.poids||"").trim() }; })})
       .then(function(res){
         $("etiquetteOverlay").classList.remove("open"); toast("Étiquette générée");
         return refresh().then(function(){ imprimerEtiquette(res.etiquette); });
@@ -2935,26 +2991,43 @@
   });
   function imprimerEtiquette(e){
     var s=invoiceSettings;
+    var n=Math.max(1, Number(e.colis)||1);
+    var details=Array.isArray(e.colisDetails)&&e.colisDetails.length ? e.colisDetails : [];
+    if(details.length) n=details.length;
     var html='<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Étiquette — '+esc(e.clientName)+'</title><style>'
       +'@page{ size:100mm 150mm; margin:0; }'
-      +'body{font-family:Arial,sans-serif;color:#111;margin:0;padding:14mm 10mm;width:100mm;height:150mm;box-sizing:border-box;}'
-      +'.from{font-size:10px;color:#555;border-bottom:1px solid #999;padding-bottom:8px;margin-bottom:14px;}'
-      +'.carrier{font-size:16px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:14px;}'
+      +'body{font-family:Arial,sans-serif;color:#111;margin:0;}'
+      +'.etq{padding:9mm 8mm;width:100mm;height:150mm;box-sizing:border-box;overflow:hidden;page-break-after:always;break-after:page;display:flex;flex-direction:column;}'
+      +'.etq:last-child{page-break-after:auto;break-after:auto;}'
+      +'.num{display:flex;justify-content:space-between;align-items:center;background:#111;color:#fff;padding:5px 10px;border-radius:4px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.num span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;} .num b{font-size:22px;}'
+      +'.contenu{border:1px solid #999;border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.4;white-space:pre-wrap;margin-top:10px;flex:1;overflow:hidden;}'
+      +'.contenu .lbl{font-size:9px;color:#777;text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;}'
+      +'.from{font-size:10px;color:#555;border-bottom:1px solid #999;padding-bottom:6px;margin-bottom:10px;}'
+      +'.carrier{font-size:16px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px;}'
       +'.to-label{font-size:9px;color:#777;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}'
       +'.to-name{font-size:20px;font-weight:800;margin-bottom:6px;}'
-      +'.to-details{font-size:13px;line-height:1.5;margin-bottom:20px;}'
+      +'.to-details{font-size:13px;line-height:1.5;margin-bottom:10px;}'
       +'.meta{display:flex;justify-content:space-between;border-top:2px solid #111;padding-top:10px;font-size:12px;}'
       +'.meta div{text-align:center;} .meta strong{display:block;font-size:16px;}'
-      +'.tracking{margin-top:16px;text-align:center;font-size:13px;letter-spacing:.1em;border:1px dashed #999;padding:8px;}'
-      +'</style></head><body>'
-      +'<div class="from"><strong>'+esc(s.raisonSociale||'')+'</strong><br>'+esc(s.adresse||'')+'<br>'+(s.telephone?'Tél : '+esc(s.telephone):'')+'</div>'
-      +'<div class="carrier">🚚 '+esc(e.transporteurName||'')+'</div>'
-      +'<div class="to-label">Destinataire</div>'
-      +'<div class="to-name">'+esc(e.clientName||'')+'</div>'
-      +'<div class="to-details">'+(e.clientAddress?esc(e.clientAddress)+'<br>':'')+(e.clientPhone?'Tél : '+esc(e.clientPhone):'')+'</div>'
-      +'<div class="meta"><div>Colis<strong>'+esc(e.colis||1)+'</strong></div>'+(e.poids?'<div>Poids<strong>'+esc(e.poids)+' kg</strong></div>':'')+'<div>Date<strong>'+fmtDate(e.createdAt).split(' · ')[0]+'</strong></div></div>'
-      +(e.trackingNumber?'<div class="tracking">N° DE SUIVI<br><strong>'+esc(e.trackingNumber)+'</strong></div>':'')
-      +'</body></html>';
+      +'.tracking{margin-top:10px;text-align:center;font-size:13px;letter-spacing:.1em;border:1px dashed #999;padding:6px;}'
+      +'</style></head><body>';
+    for(var i=0;i<n;i++){
+      var c=details[i]||{}, poids=String(c.poids||"").trim();
+      if(!details.length && n===1) poids=String(e.poids||"").trim();
+      html+='<div class="etq">'
+        +'<div class="num"><span>Colis</span><b>'+(i+1)+' / '+n+'</b></div>'
+        +'<div class="from"><strong>'+esc(s.raisonSociale||'')+'</strong><br>'+esc(s.adresse||'')+'<br>'+(s.telephone?'Tél : '+esc(s.telephone):'')+'</div>'
+        +'<div class="carrier">🚚 '+esc(e.transporteurName||'')+'</div>'
+        +'<div class="to-label">Destinataire</div>'
+        +'<div class="to-name">'+esc(e.clientName||'')+'</div>'
+        +'<div class="to-details">'+(e.clientAddress?esc(e.clientAddress)+'<br>':'')+(e.clientPhone?'Tél : '+esc(e.clientPhone):'')+'</div>'
+        +'<div class="meta"><div>Colis<strong>'+(i+1)+' / '+n+'</strong></div>'+(poids?'<div>Poids<strong>'+esc(poids)+' kg</strong></div>':'')+'<div>Date<strong>'+fmtDate(e.createdAt).split(' · ')[0]+'</strong></div></div>'
+        +(c.contenu?'<div class="contenu"><div class="lbl">Contenu</div>'+escDims(c.contenu)+'</div>':'')
+        +(e.trackingNumber?'<div class="tracking">N° DE SUIVI<br><strong>'+esc(e.trackingNumber)+'</strong></div>':'')
+        +'</div>';
+    }
+    html+='</body></html>';
     var w=window.open("","_blank");
     if(!w){ toast("Autorisez les fenêtres pop-up pour imprimer."); return; }
     w.document.open(); w.document.write(html); w.document.close();
