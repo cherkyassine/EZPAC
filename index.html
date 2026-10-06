@@ -2570,7 +2570,7 @@
 
   // Photos des sacs du site ezpac.ma (copiées dans l'espace de fichiers par le serveur)
   var PHOTOS_SITE = [["poigne","Sac à poignée"],["anse","Sac à anse"],["bretelle","Sac à bretelles"],["box","Premium Box"]];
-  var URL_PHOTOS_SITE = "http://ezpac.ma/images/";
+  var URL_PHOTOS_SITE = "https://ezpac.ma/images/";
   var photosSiteImportees = {}; // une seule copie par photo et par session
   function importerPhotoSite(cle){
     if(photosSiteImportees[cle]) return Promise.resolve(photosSiteImportees[cle]);
@@ -3374,7 +3374,7 @@
       +'<div class="soc"><b>'+esc(s.raisonSociale||'')+'</b><br>'+(s.adresse?esc(s.adresse)+'<br>':'')
       +(s.telephone?'Tél. : '+esc(s.telephone)+'<br>':'')
       +(s.email?'<a href="mailto:'+esc(s.email)+'">'+esc(s.email)+'</a>':'')
-      +(siteDoc?' · <a href="'+esc(/^https?:\/\//i.test(siteDoc)?siteDoc:'http://'+siteDoc)+'">'+esc(siteDoc.replace(/^https?:\/\//i,'').replace(/\/$/,''))+'</a>':'')
+      +(siteDoc?' · <a href="'+esc(/^https?:\/\//i.test(siteDoc)?siteDoc:'https://'+siteDoc)+'">'+esc(siteDoc.replace(/^https?:\/\//i,'').replace(/\/$/,''))+'</a>':'')
       +(s.ice?'<br>ICE : '+esc(s.ice):'')+'</div></div>'
       +'<div class="titre"><h1>'+esc(titres[d.type]||d.type)+'</h1>'+infosDoc+'</div>'
       +'<div class="parties"><div class="dest"><div class="lbl">'+destLabel+'</div><div class="nom">'+esc(d.clientName||"")+'</div>'
