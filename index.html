@@ -566,9 +566,14 @@
 </div></div>
 
 <div class="overlay" id="etiquetteOverlay"><div class="modal">
-  <h3>Générer une étiquette d'envoi</h3>
+  <h3 id="eTitre">Générer une étiquette d'envoi</h3>
   <form id="etiquetteForm">
     <div class="field"><label>Transporteur *</label><select id="eTransporteur" required></select></div>
+    <div class="field"><label>Destinataire</label><input id="eNom" placeholder="Nom du client"></div>
+    <div class="field-row">
+      <div class="field"><label>Adresse</label><input id="eAdresse" placeholder="Adresse de livraison"></div>
+      <div class="field"><label>Téléphone</label><input id="eTel" placeholder="Téléphone"></div>
+    </div>
     <div class="field-row">
       <div class="field"><label>N° de suivi</label><input id="eTracking" placeholder="Optionnel"></div>
       <div class="field"><label>Nombre de colis (1 étiquette par colis)</label><input id="eColis" type="number" step="1" min="1" max="200" value="1"></div>
@@ -739,6 +744,11 @@
     email:'ezpacsarl@gmail.com', siteWeb:'ezpac.ma', capitalSocial:'150.000,00 DH', rib:'230 810 5004520221033200 56',
     tvaDefaut:20, piedPage:'', emailAlertes:'', alertesActives:false };
   var openItemIds = {};
+  var debutClic = null;
+  document.addEventListener("mousedown", function(e){ debutClic = e.target; }, true);
+  document.addEventListener("click", function(e){
+    if(e.target.classList && e.target.classList.contains("overlay") && debutClic !== e.target) e.stopImmediatePropagation();
+  }, true);
   var revChartInstance = null;
 
   function $(id){ return document.getElementById(id); }
@@ -1229,6 +1239,10 @@
       var etq=etiquettes.find(function(x){return String(x.id)===String(btn.getAttribute("data-print-etq"));});
       if(etq) btn.addEventListener("click",function(e){ e.stopPropagation(); imprimerEtiquette(etq); });
     });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-edit-etq]'), function(btn){
+      var etq=etiquettes.find(function(x){return String(x.id)===String(btn.getAttribute("data-edit-etq"));});
+      if(etq) btn.addEventListener("click",function(e){ e.stopPropagation(); openEtiquetteModal(null, etq); });
+    });
     Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-del-etq]'), function(btn){
       var etq=etiquettes.find(function(x){return String(x.id)===String(btn.getAttribute("data-del-etq"));});
       if(etq) btn.addEventListener("click",function(e){ e.stopPropagation(); supprimerEtiquette(etq); });
@@ -1291,6 +1305,7 @@
     etiquettes.filter(function(e){ return String(e.orderId)===String(o.id); }).forEach(function(e){
       h+='<div class="h-item" style="align-items:center;"><span class="h-dot"></span><span style="flex:1;">🏷️ <strong>Étiquette</strong> '+esc(e.transporteurName||"")
         +(e.trackingNumber?' · suivi '+esc(e.trackingNumber):'')+' · '+esc(e.colis||1)+' colis — <span class="h-when">'+fmtDate(e.createdAt)+'</span></span>'
+        +'<button type="button" class="btn btn-ghost btn-sm" data-edit-etq="'+esc(e.id)+'" data-mut="1" title="Modifier" style="padding:3px 8px;">✎</button>'
         +'<button type="button" class="btn btn-ghost btn-sm" data-print-etq="'+esc(e.id)+'" style="padding:3px 8px;">🖨</button>'
         +'<button type="button" class="btn btn-ghost btn-sm" data-del-etq="'+esc(e.id)+'" data-mut="1" title="Supprimer" style="padding:3px 8px;color:var(--danger);">🗑</button></div>';
     });
@@ -2868,7 +2883,7 @@
     else etqLiees.forEach(function(e){
       h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(e.clientName)+'</div>'
         +'<div class="item-sub">'+fmtDate(e.createdAt)+(e.trackingNumber?' · Suivi : '+esc(e.trackingNumber):'')+' · '+e.colis+' colis</div></div>'
-        +'<div style="display:flex;gap:4px;"><button type="button" class="btn btn-ghost btn-sm" data-print-etq="'+esc(e.id)+'">🖨</button>'
+        +'<div style="display:flex;gap:4px;"><button type="button" class="btn btn-ghost btn-sm" data-edit-etq="'+esc(e.id)+'" data-mut="1" title="Modifier">✎</button><button type="button" class="btn btn-ghost btn-sm" data-print-etq="'+esc(e.id)+'">🖨</button>'
         +'<button type="button" class="btn btn-ghost btn-sm" data-del-etq="'+esc(e.id)+'" data-mut="1" title="Supprimer" style="color:var(--danger);">🗑</button></div></div></div>';
     });
     h+='</div>';
@@ -2878,6 +2893,10 @@
     Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-print-etq]'), function(btn){
       var eid=btn.getAttribute("data-print-etq"); var etq=etiquettes.find(function(x){return String(x.id)===String(eid);});
       if(etq) btn.addEventListener("click",function(){ imprimerEtiquette(etq); });
+    });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-edit-etq]'), function(btn){
+      var etq=etiquettes.find(function(x){return String(x.id)===String(btn.getAttribute("data-edit-etq"));});
+      if(etq) btn.addEventListener("click",function(){ openEtiquetteModal(null, etq); });
     });
     Array.prototype.forEach.call($("colDetail").querySelectorAll('[data-del-etq]'), function(btn){
       var etq=etiquettes.find(function(x){return String(x.id)===String(btn.getAttribute("data-del-etq"));});
@@ -2918,14 +2937,36 @@
 
   // ===================== ÉTIQUETTES D'ENVOI =====================
   var etiquetteOrderId=null;
-  function openEtiquetteModal(orderId){
-    etiquetteOrderId=orderId;
+  var etiquetteEditId=null;
+  // etq fourni = modification d'une étiquette déjà enregistrée
+  function openEtiquetteModal(orderId, etq){
+    etiquetteOrderId = etq ? etq.orderId : orderId;
+    etiquetteEditId = etq ? etq.id : null;
     var sel=$("eTransporteur");
     if(!transporteurs.length){ toast("Ajoutez d'abord un transporteur dans l'onglet Transporteurs"); return; }
     sel.innerHTML = transporteurs.map(function(t){ return '<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>'; }).join("");
-    $("eTracking").value=""; $("eColis").value="1";
-    etqColis=[];
-    repartirProduitsColis(1);
+    if(etq && etq.transporteurId && !transporteurs.some(function(t){ return String(t.id)===String(etq.transporteurId); }))
+      sel.innerHTML += '<option value="'+esc(etq.transporteurId)+'">'+esc(etq.transporteurName||"Transporteur supprimé")+'</option>';
+    $("eTitre").textContent = etq ? "Modifier l'étiquette d'envoi" : "Générer une étiquette d'envoi";
+    $("saveEtiquetteBtn").textContent = etq ? "Enregistrer et imprimer" : "Générer";
+    if(etq){
+      sel.value = etq.transporteurId || sel.value;
+      $("eNom").value=etq.clientName||""; $("eAdresse").value=etq.clientAddress||""; $("eTel").value=etq.clientPhone||"";
+      $("eTracking").value=etq.trackingNumber||"";
+      var det = Array.isArray(etq.colisDetails)&&etq.colisDetails.length ? etq.colisDetails : null;
+      var n = det ? det.length : Math.max(1, Number(etq.colis)||1);
+      $("eColis").value=n;
+      etqColis = det ? det.map(function(c){ return { contenu:String(c.contenu||""), poids:String(c.poids||"") }; })
+        : Array.from({length:n}, function(_, i){ return { contenu:"", poids:(n===1 && etq.poids) ? String(etq.poids) : "" }; });
+      dessinerColis();
+    } else {
+      var o=orders.find(function(x){ return String(x.id)===String(orderId); })||{};
+      var c=clients.find(function(x){ return String(x.id)===String(o.clientId); })||{};
+      $("eNom").value=c.name||""; $("eAdresse").value=c.address||""; $("eTel").value=c.phone||"";
+      $("eTracking").value=""; $("eColis").value="1";
+      etqColis=[];
+      repartirProduitsColis(1);
+    }
     $("etiquetteOverlay").classList.add("open");
   }
   // Contenu des colis : produits de la commande répartis à parts égales (modifiable)
@@ -2976,18 +3017,23 @@
   });
   $("cancelEtiquetteBtn").addEventListener("click", function(){ $("etiquetteOverlay").classList.remove("open"); });
   $("etiquetteOverlay").addEventListener("click",function(e){ if(e.target===this) this.classList.remove("open"); });
+  // Entrée dans une case ne valide pas l'étiquette (seul le bouton le fait) ; dans le contenu, Entrée = nouvelle ligne
+  $("etiquetteForm").addEventListener("keydown", function(e){
+    if(e.key==="Enter" && e.target.tagName==="INPUT") e.preventDefault();
+  });
   $("etiquetteForm").addEventListener("submit", function(e){
     e.preventDefault();
-    var btn=$("saveEtiquetteBtn"); btn.disabled=true; btn.textContent="Génération…";
+    var btn=$("saveEtiquetteBtn"), libelle=btn.textContent, modif=!!etiquetteEditId; btn.disabled=true; btn.textContent="Enregistrement…";
     var pesés=etqColis.filter(function(c){ return String(c.poids).trim()!=="" && !isNaN(Number(c.poids)); });
     var poidsTotal = pesés.length ? String(Math.round(pesés.reduce(function(a,c){ return a+Number(c.poids); },0)*100)/100) : "";
-    api({action:"genererEtiquette", orderId:etiquetteOrderId, transporteurId:$("eTransporteur").value,
+    api({action:"genererEtiquette", id:etiquetteEditId||undefined, orderId:etiquetteOrderId, transporteurId:$("eTransporteur").value,
+      clientName:$("eNom").value.trim(), clientAddress:$("eAdresse").value.trim(), clientPhone:$("eTel").value.trim(),
       trackingNumber:$("eTracking").value.trim(), colis:etqColis.length||1, poids:poidsTotal,
       colisDetails:etqColis.map(function(c){ return { contenu:String(c.contenu||"").trim(), poids:String(c.poids||"").trim() }; })})
       .then(function(res){
-        $("etiquetteOverlay").classList.remove("open"); toast("Étiquette générée");
+        $("etiquetteOverlay").classList.remove("open"); toast(modif ? "Étiquette modifiée" : "Étiquette générée");
         return refresh().then(function(){ imprimerEtiquette(res.etiquette); });
-      }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; btn.textContent="Générer"; });
+      }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; btn.textContent=libelle; });
   });
   function imprimerEtiquette(e){
     var s=invoiceSettings;
