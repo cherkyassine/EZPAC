@@ -3040,39 +3040,47 @@
     var n=Math.max(1, Number(e.colis)||1);
     var details=Array.isArray(e.colisDetails)&&e.colisDetails.length ? e.colisDetails : [];
     if(details.length) n=details.length;
+    // Étiquette carrée 80 × 80 mm (une par colis)
+    var dateEtq=fmtDate(e.createdAt).split(' · ')[0];
     var html='<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Étiquette — '+esc(e.clientName)+'</title><style>'
-      +'@page{ size:100mm 150mm; margin:0; }'
-      +'body{font-family:Arial,sans-serif;color:#111;margin:0;}'
-      +'.etq{padding:9mm 8mm;width:100mm;height:150mm;box-sizing:border-box;overflow:hidden;page-break-after:always;break-after:page;display:flex;flex-direction:column;}'
+      +'@page{ size:80mm 80mm; margin:0; }'
+      +'html,body{margin:0;padding:0;}'
+      +'body{font-family:Arial,Helvetica,sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.etq{width:80mm;height:80mm;box-sizing:border-box;padding:3mm;overflow:hidden;display:flex;flex-direction:column;gap:1.6mm;page-break-after:always;break-after:page;}'
       +'.etq:last-child{page-break-after:auto;break-after:auto;}'
-      +'.num{display:flex;justify-content:space-between;align-items:center;background:#111;color:#fff;padding:5px 10px;border-radius:4px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
-      +'.num span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;} .num b{font-size:22px;}'
-      +'.contenu{border:1px solid #999;border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.4;white-space:pre-wrap;margin-top:10px;flex:1;overflow:hidden;}'
-      +'.contenu .lbl{font-size:9px;color:#777;text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;}'
-      +'.from{font-size:10px;color:#555;border-bottom:1px solid #999;padding-bottom:6px;margin-bottom:10px;}'
-      +'.carrier{font-size:16px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px;}'
-      +'.to-label{font-size:9px;color:#777;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}'
-      +'.to-name{font-size:20px;font-weight:800;margin-bottom:6px;}'
-      +'.to-details{font-size:13px;line-height:1.5;margin-bottom:10px;}'
-      +'.meta{display:flex;justify-content:space-between;border-top:2px solid #111;padding-top:10px;font-size:12px;}'
-      +'.meta div{text-align:center;} .meta strong{display:block;font-size:16px;}'
-      +'.tracking{margin-top:10px;text-align:center;font-size:13px;letter-spacing:.1em;border:1px dashed #999;padding:6px;}'
+      +'.top{display:flex;justify-content:space-between;align-items:center;background:#000;color:#fff;border-radius:1.5mm;padding:1.2mm 2.5mm;}'
+      +'.top .tr{font-size:10pt;font-weight:800;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52mm;}'
+      +'.top .cl{text-align:right;line-height:1;} .top .cl span{display:block;font-size:6pt;letter-spacing:.12em;} .top .cl b{font-size:15pt;}'
+      +'.dest .lbl,.cont .lbl{font-size:5.5pt;color:#555;text-transform:uppercase;letter-spacing:.12em;}'
+      +'.dest .nom{font-size:13pt;font-weight:800;line-height:1.1;max-height:2.2em;overflow:hidden;}'
+      +'.dest .adr{font-size:8pt;line-height:1.2;max-height:2.4em;overflow:hidden;}'
+      +'.dest .tel{font-size:9pt;font-weight:700;}'
+      +'.cont{flex:1;min-height:0;border:.3mm solid #000;border-radius:1.5mm;padding:1mm 1.8mm;overflow:hidden;display:flex;flex-direction:column;}'
+      +'.cont .txt{flex:1;min-height:0;overflow:hidden;white-space:pre-wrap;font-size:8pt;line-height:1.25;}'
+      +'.info{display:flex;border-top:.4mm solid #000;padding-top:1mm;}'
+      +'.info div{flex:1;text-align:center;font-size:5.5pt;color:#555;text-transform:uppercase;letter-spacing:.08em;}'
+      +'.info div+div{border-left:.2mm solid #999;}'
+      +'.info b{display:block;font-size:8.5pt;color:#000;letter-spacing:0;text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      +'.exp{font-size:6pt;color:#333;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
       +'</style></head><body>';
     for(var i=0;i<n;i++){
       var c=details[i]||{}, poids=String(c.poids||"").trim();
       if(!details.length && n===1) poids=String(e.poids||"").trim();
+      var infos=(poids?'<div>Poids<b>'+esc(poids)+' kg</b></div>':'')
+        +'<div>Date<b>'+esc(dateEtq)+'</b></div>'
+        +(e.trackingNumber?'<div>N° suivi<b>'+esc(e.trackingNumber)+'</b></div>':'');
       html+='<div class="etq">'
-        +'<div class="num"><span>Colis</span><b>'+(i+1)+' / '+n+'</b></div>'
-        +'<div class="from"><strong>'+esc(s.raisonSociale||'')+'</strong><br>'+esc(s.adresse||'')+'<br>'+(s.telephone?'Tél : '+esc(s.telephone):'')+'</div>'
-        +'<div class="carrier">🚚 '+esc(e.transporteurName||'')+'</div>'
-        +'<div class="to-label">Destinataire</div>'
-        +'<div class="to-name">'+esc(e.clientName||'')+'</div>'
-        +'<div class="to-details">'+(e.clientAddress?esc(e.clientAddress)+'<br>':'')+(e.clientPhone?'Tél : '+esc(e.clientPhone):'')+'</div>'
-        +'<div class="meta"><div>Colis<strong>'+(i+1)+' / '+n+'</strong></div>'+(poids?'<div>Poids<strong>'+esc(poids)+' kg</strong></div>':'')+'<div>Date<strong>'+fmtDate(e.createdAt).split(' · ')[0]+'</strong></div></div>'
-        +(c.contenu?'<div class="contenu"><div class="lbl">Contenu</div>'+escDims(c.contenu)+'</div>':'')
-        +(e.trackingNumber?'<div class="tracking">N° DE SUIVI<br><strong>'+esc(e.trackingNumber)+'</strong></div>':'')
+        +'<div class="top"><div class="tr">🚚 '+esc(e.transporteurName||'')+'</div><div class="cl"><span>COLIS</span><b>'+(i+1)+' / '+n+'</b></div></div>'
+        +'<div class="dest"><div class="lbl">Destinataire</div><div class="nom">'+esc(e.clientName||'')+'</div>'
+        +(e.clientAddress?'<div class="adr">'+esc(e.clientAddress)+'</div>':'')
+        +(e.clientPhone?'<div class="tel">☎ '+esc(e.clientPhone)+'</div>':'')+'</div>'
+        +(c.contenu?'<div class="cont"><div class="lbl">Contenu</div><div class="txt">'+escDims(c.contenu)+'</div></div>':'<div style="flex:1"></div>')
+        +'<div class="info">'+infos+'</div>'
+        +'<div class="exp"><b>Exp. :</b> '+esc(s.raisonSociale||'')+(s.telephone?' · '+esc(String(s.telephone).split('/')[0].trim()):'')+(s.adresse?' · '+esc(s.adresse):'')+'</div>'
         +'</div>';
     }
+    // contenu trop long : la police est réduite jusqu'à ce que tout tienne dans le cadre
+    html+='<script>document.querySelectorAll(".cont .txt").forEach(function(t){ var f=8; while(t.scrollHeight>t.clientHeight+1 && f>5){ f-=0.25; t.style.fontSize=f+"pt"; } });<\/script>';
     html+='</body></html>';
     var w=window.open("","_blank");
     if(!w){ toast("Autorisez les fenêtres pop-up pour imprimer."); return; }
