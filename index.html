@@ -1582,7 +1582,7 @@
           +'<input class="ln-desc" data-idx="'+idx+'" placeholder="Remise" value="'+esc(l.designation)+'">'
           +'<select class="ln-rmode" data-idx="'+idx+'"><option value="pct"'+(r.mode==="pct"?' selected':'')+'>% des produits</option><option value="mad"'+(r.mode==="mad"?' selected':'')+'>Montant MAD</option></select>'
           +'<input class="ln-rval" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="'+(r.mode==="pct"?"%":"MAD")+'" value="'+(r.valeur||'')+'">'
-          +'<select class="ln-rmotif" data-idx="'+idx+'" title="Motif de la remise"><option value=""'+(!r.motif?' selected':'')+'>Remise normale</option><option value="premier"'+(r.motif==="premier"?' selected':'')+'>1er achat</option></select>'
+          +'<select class="ln-rmotif" data-idx="'+idx+'" title="Motif de la remise"><option value=""'+(!r.motif?' selected':'')+'>Remise normale</option><option value="premier"'+(r.motif==="premier"?' selected':'')+'>🎁 1er achat</option></select>'
           +'<span class="total-cell">'+nf(l.total)+'</span>'
           +'<button type="button" class="rm-btn" data-idx="'+idx+'" title="Supprimer la remise">✕</button></div>';
         if(r.mode==="mad" && baseRemise>0 && Number(l.total)) html+='<div class="ln-apres-remise">↳ soit '+Number(Math.abs(Number(l.total))/baseRemise*100).toLocaleString("fr-FR",{maximumFractionDigits:1})+' % de remise sur chaque article</div>';
@@ -1620,7 +1620,8 @@
     html+='<div class="lines-total"><span>Total HT : '+nf(tx.totalHT)+'</span><span>TVA '+tva+'% : '+nf(tx.totalTVA)+'</span><span>TTC : '+nf(tx.totalTTC)+'</span></div>';
     var outils='<div class="ln-tools">'
       +(lignes.some(function(l){ return l.type==="transport"; }) ? '' : '<button type="button" class="btn btn-ghost btn-sm ln-add-transport">🚚 + Transport</button>')
-      +'<button type="button" class="btn btn-ghost btn-sm ln-add-remise">🏷️ + Remise</button></div>';
+      +'<button type="button" class="btn btn-ghost btn-sm ln-add-remise">🏷️ + Remise</button>'
+      +(lignes.some(function(l){ return l.type==="remise" && l.remise && l.remise.motif==="premier"; }) ? '' : '<button type="button" class="btn btn-ghost btn-sm ln-add-remise ln-premier">🎁 + Remise 1er achat</button>')+'</div>';
     el.innerHTML = (lignes.length ? html : '<div class="hint" style="padding:6px 0;">Aucune ligne — cliquez sur « Ajouter une ligne ».</div>') + outils;
   }
   // Achat : prévenir si un autre fournisseur propose ce produit moins cher
@@ -1715,7 +1716,8 @@
         if(e.target.classList.contains("ln-add-transport")){
           ls.push(nouvelleLigneTransport(ls));
           if(!Number((invoiceSettings||{}).transportDefaut||0)) toast("Saisissez le montant du transport (montant par défaut : 🏢 Coordonnées de l'entreprise)");
-        } else ls.push({ type:"remise", productId:"", designation:"Remise", quantity:1, unitPrice:0, total:0, remise:{mode:"pct", valeur:5} });
+        } else ls.push({ type:"remise", productId:"", designation:"Remise", quantity:1, unitPrice:0, total:0,
+          remise: e.target.classList.contains("ln-premier") ? {mode:"pct", valeur:5, motif:"premier"} : {mode:"pct", valeur:5} });
         // remises et transport toujours en fin de document
         ls.sort(function(a,b){ var o=function(l){ return l.type==="remise"?1:l.type==="transport"?2:0; }; return o(a)-o(b); });
         c2.setLignes(ls); renderLinesEditor(containerId, ls);
@@ -3420,6 +3422,7 @@
       return "•  "+l.designation+"\n   "+nf(l.quantity)+" × "+nf(l.unitPrice)+" "+dev+" = "+nf(l.total)+" "+dev;
     }).join("\n");
     return "Bonjour "+(d.clientName||"")+",\n\nVotre devis est "+d.numero+" :\n\n"+lignes
+      +((d.lines||[]).some(function(l){ return l.type==="remise" && l.remise && l.remise.motif==="premier"; }) ? "\n\n🎁 Remise de bienvenue pour votre premier achat !" : "")
       +(d.notesClient?"\n\n📝 "+d.notesClient:"")
       +"\n\nTotal TTC : "+nf(d.totalTTC)+" "+dev+"\nDevis valable 30 jours. Le devis en PDF suit ce message."
       +"\n\nPour confirmer votre commande, répondez simplement à ce message.\n"+((invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC");
@@ -3505,6 +3508,8 @@
     var enLettres = avecPrix && phrases[d.type] ? '<div class="lettres">'+phrases[d.type]+' : <b>'+montantEnLettres(d.totalTTC, dev)+' TTC</b></div>' : '';
 
     var notesClient = d.notesClient ? '<div class="notes"><b>Notes :</b> '+esc(d.notesClient)+'</div>' : '';
+    if(lignes.some(function(l){ return l.type==="remise" && l.remise && l.remise.motif==="premier"; }))
+      notesClient = '<div class="notes" style="color:#C81E28;"><b>🎁 Remise de bienvenue</b> accordée pour votre premier achat chez '+esc(s.raisonSociale||"EZPAC")+'.</div>' + notesClient;
     var conditions = d.type==="DEVIS" ? '<div class="cond"><b>Conditions :</b> devis valable 30 jours · délai de fabrication confirmé à la commande · prix'+(lignesTTC?' TTC':' HT')+' en '+dev+'.</div>' : '';
     var signGauche = d.type==="DEVIS" ? "Bon pour accord (date, cachet et signature du client)" : (d.type==="BL" ? "Reçu par (nom, date et signature)" : "Signature client");
     var cachet = (d.type==="FACTURE" && !(opts && opts.sansCachet)) ? '<img class="cachet" src="'+CACHET_DATA_URI+'" alt="">' : '';
