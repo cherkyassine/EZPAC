@@ -138,6 +138,10 @@
   .line-row select, .line-row input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px;background:var(--paper-raised);color:var(--ink);width:100%;}
   .line-row .ln-tag{font-size:12px;font-weight:700;color:var(--ink-soft);padding:6px 4px;white-space:nowrap;}
   .line-row.ln-remise .total-cell{color:var(--danger);}
+  .ln-apres-remise{font-size:12px;color:var(--success);margin:-4px 0 8px 6px;}
+  .line-row.ln-remise{grid-template-columns:auto 1.4fr 0.9fr 0.6fr 0.8fr 0.7fr auto;}
+  @media (max-width:520px){ .line-row.ln-remise{grid-template-columns:1fr 1fr;} }
+  .ln-apres-remise b{font-weight:700;}
   .line-row.ln-transport .ln-tag{color:var(--navy);}
   .ln-tools{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
   .line-row .total-cell{font-size:12.5px;font-weight:700;text-align:right;padding-right:4px;}
@@ -178,6 +182,15 @@
   .field-row{display:flex;gap:10px;}
   .field-row .field{flex:1;}
   .modal-actions{display:flex;gap:10px;margin-top:6px;}
+  .modal.modal-large{max-width:980px;}
+  .imp-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px;}
+  .imp-table th{text-align:left;font-size:11px;color:var(--ink-faint);font-weight:600;padding:6px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper-raised);}
+  .imp-table td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .imp-table input[type=text],.imp-table input[type=number],.imp-table input[type=date],.imp-table select{width:100%;padding:4px 6px;font-size:12.5px;}
+  .imp-table tr.ignoree td{opacity:.5;}
+  .imp-scroll{max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:10px;}
+  .doc-fichier{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;}
+  .doc-fichier a{flex:1;color:var(--navy);font-weight:600;text-decoration:none;word-break:break-all;}
   .modal-actions .btn{flex:1;}
   .loc-box{border:1px solid var(--line);border-radius:11px;padding:12px 12px 4px;background:var(--paper);}
   .loc-status{font-size:11.5px;color:var(--ink-faint);margin:6px 0 8px;}
@@ -383,6 +396,8 @@
       <div class="lines-editor" id="qLinesEditor"></div>
       <button type="button" class="btn btn-ghost btn-sm" id="qAddLine">+ Ajouter une ligne</button>
     </div>
+    <div class="field"><label>Notes pour le client <span class="hint">(imprimées sur le devis)</span></label><textarea id="qNotesClient" rows="2" placeholder="Ex. : délai 10 jours après validation du logo · livraison incluse à Rabat"></textarea></div>
+    <div class="field"><label>Note interne <span class="hint">(non imprimée)</span></label><textarea id="qNotes" rows="2" placeholder="Ex. : client recommandé par…"></textarea></div>
     <div class="field"><label>Devise</label>
       <select id="qCurrency"><option>MAD</option></select>
     </div>
@@ -634,7 +649,8 @@
       <div class="lines-editor" id="dLinesEditor"></div>
       <button type="button" class="btn btn-ghost btn-sm" id="dAddLine">+ Ajouter une ligne</button>
     </div>
-    <div class="field"><label>Notes</label><textarea id="dNotes" placeholder="Notes internes…"></textarea></div>
+    <div class="field"><label>Notes pour le client <span class="hint">(imprimées sur le document)</span></label><textarea id="dNotesClient" rows="2" placeholder="Ex. : délai 10 jours après validation du logo"></textarea></div>
+    <div class="field"><label>Notes internes <span class="hint">(non imprimées)</span></label><textarea id="dNotes" placeholder="Notes internes…"></textarea></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="cancelDocBtn">Annuler</button>
       <button type="submit" class="btn btn-primary" id="saveDocBtn">Enregistrer</button>
@@ -1061,7 +1077,7 @@
     else if(activeTab==="carriers") renderCarrierList();
     else renderInvoiceList();
   }
-  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"", ordersAll:"", carriers:"+ Nouveau transporteur" };
+  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"📎 Ajouter des factures (fichiers)", ordersAll:"", carriers:"+ Nouveau transporteur" };
   function setTab(tab){
     activeTab=tab;
     ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll","Carriers"].forEach(function(t){
@@ -1088,6 +1104,7 @@
     else if(activeTab==="products") openProductModal(null);
     else if(activeTab==="suppliers") openSupplierModal(null);
     else if(activeTab==="carriers") openCarrierModal(null);
+    else if(activeTab==="invoices") ouvrirImportFactures();
   });
   $("searchInput").addEventListener("input", renderList);
   $("orderStatusFilter").addEventListener("change", renderList);
@@ -1515,7 +1532,12 @@
   // Elles entrent dans les totaux comme les autres lignes (TTC) mais pas dans le stock (pas de produit).
   function estSpeciale(l){ return l && (l.type==="transport" || l.type==="remise"); }
   function sousTotalProduits(lignes){ return lignes.reduce(function(t,l){ return t + (estSpeciale(l) ? 0 : Number(l.total||0)); }, 0); }
-  function libelleRemise(r){ return "Remise " + (r.mode==="pct" ? String(r.valeur).replace(".",",")+" %" : "commerciale"); }
+  var MOTIFS_REMISE = { premier:"premier achat" };
+  function libelleRemise(r){
+    var motif = MOTIFS_REMISE[r.motif];
+    if(r.mode==="pct") return "Remise " + (motif ? motif+" " : "") + String(r.valeur).replace(".",",")+" %";
+    return "Remise " + (motif || "commerciale");
+  }
   function nouvelleLigneTransport(lignes){
     var s=invoiceSettings||{}, l={ type:"transport", transportAuto:true, productId:"", designation:"Frais de transport", quantity:1, unitPrice:Number(s.transportDefaut||0), total:0 };
     return l;
@@ -1548,6 +1570,10 @@
     var el=$(containerId);
     recalculerLignesSpeciales(lignes);
     var html='';
+    // part de remise appliquée à chaque article (remises en % ou montant fixe réparti au prorata)
+    var baseRemise=sousTotalProduits(lignes), totalRemises=-lignes.reduce(function(t,l){ return t+(l.type==="remise"?Number(l.total||0):0); },0);
+    var tauxRemise = baseRemise>0 && totalRemises>0 ? Math.min(1, totalRemises/baseRemise) : 0;
+    var fmtPrix = function(n){ return Number(n||0).toLocaleString("fr-FR",{minimumFractionDigits:2, maximumFractionDigits:3}); };
     lignes.forEach(function(l,idx){
       if(l.type==="remise"){
         var r=l.remise||{mode:"pct", valeur:0};
@@ -1556,8 +1582,10 @@
           +'<input class="ln-desc" data-idx="'+idx+'" placeholder="Remise" value="'+esc(l.designation)+'">'
           +'<select class="ln-rmode" data-idx="'+idx+'"><option value="pct"'+(r.mode==="pct"?' selected':'')+'>% des produits</option><option value="mad"'+(r.mode==="mad"?' selected':'')+'>Montant MAD</option></select>'
           +'<input class="ln-rval" type="number" step="0.01" min="0" data-idx="'+idx+'" placeholder="'+(r.mode==="pct"?"%":"MAD")+'" value="'+(r.valeur||'')+'">'
-          +'<span></span><span class="total-cell">'+nf(l.total)+'</span>'
+          +'<select class="ln-rmotif" data-idx="'+idx+'" title="Motif de la remise"><option value=""'+(!r.motif?' selected':'')+'>Remise normale</option><option value="premier"'+(r.motif==="premier"?' selected':'')+'>1er achat</option></select>'
+          +'<span class="total-cell">'+nf(l.total)+'</span>'
           +'<button type="button" class="rm-btn" data-idx="'+idx+'" title="Supprimer la remise">✕</button></div>';
+        if(r.mode==="mad" && baseRemise>0 && Number(l.total)) html+='<div class="ln-apres-remise">↳ soit '+Number(Math.abs(Number(l.total))/baseRemise*100).toLocaleString("fr-FR",{maximumFractionDigits:1})+' % de remise sur chaque article</div>';
         return;
       }
       if(l.type==="transport"){
@@ -1583,6 +1611,9 @@
       html+='<span class="total-cell">'+nf(l.total)+'</span>';
       html+='<button type="button" class="rm-btn" data-idx="'+idx+'" title="Supprimer la ligne">✕</button>';
       html+='</div>';
+      var puL=Number(l.unitPrice||0);
+      if(tauxRemise>0 && puL>0)
+        html+='<div class="ln-apres-remise">↳ Après remise : <b>'+fmtPrix(puL*(1-tauxRemise))+' MAD</b> / pièce (−'+fmtPrix(puL*tauxRemise)+') · total '+nf(Math.round(Number(l.total||0)*(1-tauxRemise)*100)/100)+' MAD</div>';
     });
     var tva = invoiceSettings.tvaDefaut!=null?Number(invoiceSettings.tvaDefaut):20;
     var tx=calculerTotauxTTC(lignes, tva);
@@ -1645,9 +1676,10 @@
         }
         lignes[idx].total = Number(lignes[idx].quantity||0)*Number(lignes[idx].unitPrice||0);
         c.setLignes(lignes); renderLinesEditor(containerId, lignes);
-      } else if(e.target.classList.contains("ln-rmode") || e.target.classList.contains("ln-rval")){
+      } else if(e.target.classList.contains("ln-rmode") || e.target.classList.contains("ln-rval") || e.target.classList.contains("ln-rmotif")){
         var r=lignes[idx].remise||{mode:"pct", valeur:0};
         if(e.target.classList.contains("ln-rmode")) r.mode=e.target.value;
+        if(e.target.classList.contains("ln-rmotif")){ r.motif=e.target.value; lignes[idx].designationAuto=true; } // le libellé suit le motif choisi
         if(e.target.classList.contains("ln-rval")) r.valeur=Number(String(e.target.value||0).replace(",","."));
         lignes[idx].remise=r; c.setLignes(lignes); renderLinesEditor(containerId, lignes);
       } else if(e.target.classList.contains("ln-desc")){
@@ -1728,7 +1760,7 @@
   // ===================== DEVIS =====================
   var quoteClientId=null, quoteLines=[];
   function openQuoteModal(clientId){
-    quoteClientId=clientId; quoteLines=[nouvelleLigneVide()]; $("qCurrency").value="MAD";
+    quoteClientId=clientId; quoteLines=[nouvelleLigneVide()]; $("qCurrency").value="MAD"; $("qNotesClient").value=""; $("qNotes").value="";
     renderLinesEditor("qLinesEditor", quoteLines);
     wireLinesEditor("qLinesEditor", function(){return quoteLines;}, function(v){quoteLines=v;}, function(){return quoteClientId;});
     $("quoteOverlay").classList.add("open");
@@ -1741,7 +1773,7 @@
     var lignesValides = quoteLines.filter(function(l){ return l.designation && Number(l.quantity)>0; });
     if(!lignesValides.length){ toast("Ajoutez au moins un article valide"); return; }
     var btn=$("saveQuoteBtn"); btn.disabled=true; btn.textContent="Création…";
-    api({action:"genererDevis", clientId:quoteClientId, lines:lignesValides, currency:$("qCurrency").value}).then(function(res){
+    api({action:"genererDevis", clientId:quoteClientId, lines:lignesValides, currency:$("qCurrency").value, notesClient:$("qNotesClient").value.trim(), notes:$("qNotes").value.trim()}).then(function(res){
       $("quoteOverlay").classList.remove("open"); toast("Devis "+res.document.numero+" créé");
       return refresh().then(function(){ imprimerDocument(res.document); });
     }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; btn.textContent="Créer le devis"; });
@@ -1801,7 +1833,8 @@
       h+='<div style="margin:0 0 12px;"><button class="btn btn-gold" id="envoyerWebBtn" data-mut="1" style="width:100%;">📲 Prix saisis — envoyer le devis au client par WhatsApp</button>'
         +'<div class="hint" style="margin-top:4px;">Ouvre WhatsApp avec le détail du devis, télécharge le PDF à joindre et passe le devis « En attente ».</div></div>';
     if(d.statutDevis==="Demande web") h+='<div class="summary-bar">🌐 Demande reçue du site web : les prix des produits reconnus sont pré-remplis. Cliquez sur ✎ pour vérifier / compléter les prix, puis passez le statut à « En attente » avant d\x27envoyer le devis.</div>';
-    if(d.notes) h+='<div class="notes-block" style="white-space:pre-line;">'+esc(d.notes)+'</div>';
+    if(d.notesClient) h+='<div class="notes-block" style="white-space:pre-line;border-color:var(--navy);"><strong>📝 Notes pour le client</strong> <span class="hint">(imprimées)</span><br>'+esc(d.notesClient)+'</div>';
+    if(d.notes) h+='<div class="notes-block" style="white-space:pre-line;"><span class="hint">Note interne</span><br>'+esc(d.notes)+'</div>';
     h+='<div class="section-head"><h3>Détail</h3>'+(d.statutDevis!=="Converti"?'<button class="btn btn-gold btn-sm" id="convertBtn" data-mut="1">✅ Convertir en commande</button>':'<span class="hint">Déjà converti en commande</span>')+'</div>';
     (d.lines||[]).forEach(function(l){
       h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(l.designation)+'</div>'
@@ -1854,6 +1887,141 @@
     }).catch(function(e){ toast("Échec : "+e.message); });
   }
 
+  // ===================== IMPORT DE FACTURES EXISTANTES =====================
+  // Fichiers HTML du « modèle de facture » : toutes les données sont lues (n°, client, lignes, TVA, paiement).
+  // PDF / images : joints à la facture du même numéro, ou facture saisie à la main (montant global).
+  var importLignes=[];
+  function nombreFr(v){ var n=parseFloat(String(v==null?"":v).replace(/\s/g,"").replace(",",".")); return isNaN(n)?0:n; }
+  function arrondi2(n){ return Math.round(n*100)/100; }
+  // clé d'appariement d'un numéro : FA096/2026, FA096-2026, « FA096-2026 - Client.pdf » → FA96-2026
+  function cleNumero(t){ var m=String(t||"").match(/FA\D{0,3}0*(\d{1,6})(?:\D{1,3}(\d{4}))?/i); return m ? "FA"+Number(m[1])+"-"+(m[2]||"") : null; }
+  function nbNumeros(t){ return (String(t||"").match(/FA\D{0,3}\d{2,6}/gi)||[]).length; }
+  function normNumero(n){ return String(n||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
+  function factureDepuisModele(e){
+    var lignes=(e.lignes||[]).filter(function(l){ return l.designation || nombreFr(l.unitPrice) || nombreFr(l.quantity); }).map(function(l){
+      var pu=nombreFr(l.unitPrice);
+      if(l.type==="remise") return { type:"remise", designation:l.designation||"Remise", productId:"", quantity:1, unitPrice:-Math.abs(pu), total:-arrondi2(Math.abs(pu)), remise:{mode:"mad",valeur:Math.abs(pu)}, designationAuto:false };
+      if(l.type==="transport") return { type:"transport", designation:l.designation||"Frais de transport", productId:"", quantity:1, unitPrice:pu, total:arrondi2(pu), transportAuto:false };
+      var q=nombreFr(l.quantity); return { designation:l.designation||"", productId:"", quantity:q, unitPrice:pu, total:arrondi2(q*pu) };
+    });
+    var notes=String(e.notes||"");
+    return { numero:String(e.numero||"").trim(), date:e.date||"", clientName:e.cNom||"", clientAddress:e.cAdr||"", clientPhone:e.cTel||"", clientIce:e.cIce||"",
+      notes:notes, mode:e.mode==="HT"?"HT":"TTC", tvaRate:e.tva!=null&&e.tva!==""?nombreFr(e.tva):20, lines:lignes,
+      statutPaiement:/pay[ée]/i.test(notes)&&!/non\s*pay/i.test(notes)?"Payée":"Non payée" };
+  }
+  function totalTTCImport(f){
+    var somme=(f.lines||[]).reduce(function(a,l){ return a+Number(l.total||0); },0);
+    if(f.mode==="HT"){ var ht=arrondi2(somme); return arrondi2(ht+Math.round(ht*f.tvaRate)/100); }
+    return arrondi2(somme);
+  }
+  function factureExiste(numero){ var n=normNumero(numero); return !!n && documents.some(function(d){ return d.type==="FACTURE" && normNumero(d.numero)===n; }); }
+  function ouvrirImportFactures(){
+    var ov=$("importFacturesOverlay");
+    if(!ov){
+      ov=document.createElement("div"); ov.className="overlay"; ov.id="importFacturesOverlay";
+      ov.innerHTML='<div class="modal modal-large"><h3>📎 Ajouter des factures existantes</h3>'
+        +'<p class="hint" style="font-size:13px;line-height:1.5;">Choisissez les fichiers de vos factures (vous pouvez tout sélectionner d\'un coup, par ex. le dossier VENTES) :<br>'
+        +'• <b>fichiers .html du modèle de facture</b> : numéro, client, articles, TVA et paiement sont lus automatiquement ;<br>'
+        +'• <b>PDF ou photos</b> : joints à la facture du même numéro (FA096…) ; sinon, saisissez le client et le montant TTC.<br>'
+        +'Les factures déjà présentes dans le CRM sont ignorées. Le stock n\'est pas modifié.</p>'
+        +'<div class="item-row" style="gap:10px;flex-wrap:wrap;"><input type="file" id="impFichiers" multiple accept=".html,.htm,.pdf,image/*" style="flex:1;min-width:220px;">'
+        +'<label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="impCreerClients" checked> Créer les clients qui n\'existent pas</label></div>'
+        +'<div id="impApercu"></div>'
+        +'<div class="hint" id="impStatut" style="margin:8px 0;font-size:13px;"></div>'
+        +'<div class="modal-actions"><button type="button" class="btn btn-ghost" id="impFermer">Fermer</button><button type="button" class="btn btn-primary" id="impLancer" data-mut="1" disabled>Importer</button></div></div>';
+      document.body.appendChild(ov);
+      ov.addEventListener("click", function(e){ if(e.target===ov) ov.classList.remove("open"); });
+      $("impFermer").addEventListener("click", function(){ ov.classList.remove("open"); });
+      $("impFichiers").addEventListener("change", function(){ analyserFichiersFactures(this.files); });
+      $("impLancer").addEventListener("click", lancerImportFactures);
+      // saisies et cases de l'aperçu (écouteurs posés une seule fois)
+      $("impApercu").addEventListener("input", function(e){ var i=e.target.getAttribute("data-imp"); if(i==null) return; importLignes[i].facture[e.target.getAttribute("data-k")]=e.target.value; majBoutonImport(); });
+      $("impApercu").addEventListener("change", function(e){
+        var i=e.target.getAttribute("data-imp"), c=e.target.getAttribute("data-imp-coche");
+        if(e.target.id==="impTout"){ var v=e.target.checked; importLignes.forEach(function(l){ if(!l.existe) l.coche=v; }); dessinerApercuImport(); return; }
+        if(i!=null) importLignes[i].facture[e.target.getAttribute("data-k")]=e.target.value;
+        if(c!=null) importLignes[c].coche=e.target.checked;
+        majBoutonImport();
+      });
+    }
+    importLignes=[]; $("impFichiers").value=""; $("impApercu").innerHTML=""; $("impStatut").textContent=""; $("impLancer").disabled=true; $("impLancer").textContent="Importer";
+    ov.classList.add("open");
+  }
+  async function analyserFichiersFactures(liste){
+    $("impStatut").textContent="Lecture des fichiers…";
+    var parCle={}, autres=[], groupes=[];
+    for(var i=0;i<liste.length;i++){
+      var f=liste[i], nom=f.name, html=/\.html?$/i.test(nom);
+      if(html){
+        var texte=await f.text(), m=texte.match(/\n\s*etat = (\{.*\});\s*\n/);
+        if(m){ try{ var e=JSON.parse(m[1]);
+          if(e.type && e.type!=="FACTURE"){ autres.push({ nom:nom, raison:"pas une facture ("+e.type+")" }); continue; }
+          var fac=factureDepuisModele(e), cle=cleNumero(fac.numero)||cleNumero(nom)||nom;
+          parCle[cle]=Object.assign(parCle[cle]||{}, { facture:fac, html:f }); continue; }catch(err){} }
+      }
+      if(nbNumeros(nom)>1){ groupes.push(nom); continue; } // PDF regroupant plusieurs factures : non joint
+      var cleF=cleNumero(nom)||nom;
+      parCle[cleF]=Object.assign(parCle[cleF]||{}, { fichier:f });
+    }
+    importLignes=Object.keys(parCle).map(function(cle){
+      var x=parCle[cle], fac=x.facture;
+      if(!fac){ // fichier seul : saisie manuelle
+        var base=x.fichier.name.replace(/\.[^.]+$/,""), parts=base.split(/\s+-\s+/);
+        fac={ numero:(String(parts[0]).match(/FA\S*/i)||[parts[0]])[0], date:new Date().toISOString().slice(0,10), clientName:parts.slice(1).join(" - "),
+          clientAddress:"", clientPhone:"", clientIce:"", notes:"", mode:"TTC", tvaRate:Number(invoiceSettings.tvaDefaut||20), lines:[], statutPaiement:"Non payée", manuelle:true, montant:"" };
+      }
+      var deja=factureExiste(fac.numero);
+      return { facture:fac, joint:x.fichier||x.html, existe:deja, coche:!deja };
+    }).sort(function(a,b){ return String(a.facture.numero).localeCompare(String(b.facture.numero),"fr",{numeric:true}); });
+    dessinerApercuImport();
+    var msg=[]; if(groupes.length) msg.push(groupes.length+" PDF regroupant plusieurs factures ignoré(s) ("+groupes.join(", ")+")");
+    if(autres.length) msg.push(autres.length+" fichier(s) ignoré(s) : "+autres.map(function(a){return a.nom+" – "+a.raison;}).join(", "));
+    $("impStatut").textContent=msg.join(" · ");
+  }
+  function dessinerApercuImport(){
+    var nouvelles=importLignes.filter(function(l){return !l.existe;}).length;
+    var h='<div class="hint" style="margin-top:10px;font-size:13px;"><b>'+importLignes.length+'</b> facture(s) trouvée(s) · <b>'+nouvelles+'</b> nouvelle(s) · '+(importLignes.length-nouvelles)+' déjà dans le CRM</div>';
+    h+='<div class="imp-scroll"><table class="imp-table"><thead><tr><th><input type="checkbox" id="impTout" checked></th><th>N°</th><th>Date</th><th>Client</th><th style="text-align:right;">Total TTC</th><th>Paiement</th><th>Fichier joint</th></tr></thead><tbody>';
+    importLignes.forEach(function(l,i){
+      var f=l.facture, man=f.manuelle;
+      h+='<tr class="'+(l.existe?"ignoree":"")+'"><td><input type="checkbox" data-imp-coche="'+i+'"'+(l.coche?" checked":"")+(l.existe?" disabled":"")+'></td>'
+        +'<td>'+(man?'<input type="text" data-imp="'+i+'" data-k="numero" value="'+esc(f.numero)+'">':'<b>'+esc(f.numero)+'</b>')+(l.existe?'<div class="hint">déjà dans le CRM</div>':'')+'</td>'
+        +'<td>'+(man?'<input type="date" data-imp="'+i+'" data-k="date" value="'+esc(String(f.date).slice(0,10))+'">':esc(fmtDate(f.date).split(" · ")[0]))+'</td>'
+        +'<td>'+(man?'<input type="text" data-imp="'+i+'" data-k="clientName" value="'+esc(f.clientName)+'" placeholder="Client">':esc(f.clientName))+'</td>'
+        +'<td style="text-align:right;white-space:nowrap;">'+(man?'<input type="number" step="0.01" min="0" data-imp="'+i+'" data-k="montant" value="'+esc(f.montant)+'" placeholder="TTC" style="max-width:110px;">':nf(totalTTCImport(f))+' MAD'+(f.mode==="HT"?'<div class="hint">prix saisis HT</div>':''))+'</td>'
+        +'<td><select data-imp="'+i+'" data-k="statutPaiement"><option'+(f.statutPaiement==="Payée"?" selected":"")+'>Payée</option><option'+(f.statutPaiement!=="Payée"?" selected":"")+'>Non payée</option></select></td>'
+        +'<td class="hint">'+(l.joint?esc(l.joint.name):"—")+'</td></tr>';
+    });
+    h+='</tbody></table></div>';
+    $("impApercu").innerHTML=h; majBoutonImport();
+  }
+  function majBoutonImport(){
+    var n=importLignes.filter(function(l){ return l.coche && !l.existe; }).length;
+    $("impLancer").disabled=!n; $("impLancer").textContent=n?"Importer "+n+" facture(s)":"Importer";
+  }
+  async function lancerImportFactures(){
+    var aFaire=importLignes.filter(function(l){ return l.coche && !l.existe; });
+    // factures saisies à la main : numéro, client et montant obligatoires
+    for(var k=0;k<aFaire.length;k++){ var fm=aFaire[k].facture; if(fm.manuelle && (!String(fm.numero).trim() || !(nombreFr(fm.montant)>0))){ toast("Facture "+(fm.numero||"sans numéro")+" : indiquez le numéro et le montant TTC"); return; } }
+    if(!confirm("Importer "+aFaire.length+" facture(s) dans le CRM ?")) return;
+    var btn=$("impLancer"); btn.disabled=true; var ok=0, erreurs=[];
+    for(var i=0;i<aFaire.length;i++){
+      var l=aFaire[i], f=Object.assign({}, l.facture);
+      $("impStatut").textContent="Import "+(i+1)+" / "+aFaire.length+" : "+f.numero+"…";
+      if(f.manuelle){ var mt=arrondi2(nombreFr(f.montant)); f.lines=[{ designation:"Facture "+f.numero+" (montant global)", productId:"", quantity:1, unitPrice:mt, total:mt }]; f.mode="TTC"; }
+      try{
+        var fichier=null;
+        if(l.joint){ if(l.joint.size>15*1024*1024) erreurs.push(f.numero+" : fichier trop volumineux, facture importée sans fichier");
+          else fichier=(await api({action:"uploadFile", filename:l.joint.name, mimeType:l.joint.type||(/\.html?$/i.test(l.joint.name)?"text/html":"application/octet-stream"), data:await readBase64(l.joint)})).file; }
+        await api({action:"importerFacture", facture:f, fichier:fichier, creerClient:$("impCreerClients").checked});
+        ok++; l.existe=true;
+      }catch(e){ erreurs.push(f.numero+" : "+e.message); }
+    }
+    $("impStatut").textContent="✅ "+ok+" facture(s) importée(s)"+(erreurs.length?" · ⚠ "+erreurs.length+" problème(s) : "+erreurs.join(" | "):"");
+    btn.textContent="Importer"; toast(ok+" facture(s) importée(s)");
+    await refresh(); dessinerApercuImport();
+  }
+
   // ===================== FACTURES =====================
   function factures(){ return documents.filter(function(d){return d.type==="FACTURE";}); }
   function avoirs(){ return documents.filter(function(d){return d.type==="AVOIR";}); }
@@ -1864,7 +2032,7 @@
     var totalPaye=factures().filter(function(d){return d.statutPaiement==="Payée";}).reduce(function(s,d){return s+(d.totalTTC||0);},0);
     var el=$("listScroll");
     var resume='<div class="summary-bar">Facturé net : <strong>'+nf(totalFacture)+' MAD</strong> · Encaissé : <strong>'+nf(totalPaye)+' MAD</strong> · En attente : <strong>'+nf(totalFacture-totalPaye)+' MAD</strong></div>';
-    if(!list.length){ el.innerHTML=resume+'<div class="empty-hint">'+(factures().length?"Aucune facture ne correspond.":"Aucune facture pour l'instant.<br>Générez-en une depuis une commande.")+'</div>'; return; }
+    if(!list.length){ el.innerHTML=resume+'<div class="empty-hint">'+(factures().length?"Aucune facture ne correspond.":"Aucune facture pour l'instant.<br>Générez-en une depuis une commande,<br>ou ajoutez vos factures existantes avec « 📎 Ajouter des factures ».")+'</div>'; return; }
     list.sort(function(a,b){return String(b.date).localeCompare(String(a.date));});
     el.innerHTML=resume+list.map(function(d){
       var j=daysSince(d.date); var enRetard = d.type==="FACTURE" && d.statutPaiement==="Non payée" && j!=null && j>30;
@@ -1893,6 +2061,12 @@
     if(enRetard && client && client.email){
       h+='<div class="notes-block" style="border-color:var(--danger);"><strong>Facture en retard.</strong> <a href="mailto:'+esc(client.email)+'?subject='+encodeURIComponent("Relance — Facture "+d.numero)+'&body='+encodeURIComponent("Bonjour,\n\nSauf erreur de notre part, la facture "+d.numero+" du "+ (new Date(d.date)).toLocaleDateString("fr-FR") +" d'un montant de "+d.totalTTC+" "+(d.currency||"MAD")+" reste impayée à ce jour.\n\nMerci de bien vouloir régulariser dans les meilleurs délais.\n\nCordialement.")+'" style="color:var(--navy);font-weight:700;">📧 Envoyer une relance par email</a></div>';
     }
+    var fichiersDoc = Array.isArray(d.files) ? d.files : [];
+    h+='<div class="section-head"><h3>📎 Fichiers ('+fichiersDoc.length+')</h3></div>';
+    h+=fichiersDoc.map(function(f){ return '<div class="doc-fichier">📄 <a href="'+esc(f.url)+'" target="_blank" rel="noopener">'+esc(f.name||"fichier")+'</a>'
+      +(f.sizeBytes?'<span class="hint">'+Math.max(1,Math.round(f.sizeBytes/1024))+' Ko</span>':'')
+      +'<button type="button" class="btn btn-ghost btn-sm" data-retirer-fichier="'+esc(f.id)+'" data-mut="1" title="Retirer" style="color:var(--danger);padding:3px 8px;">✕</button></div>'; }).join("");
+    h+='<div class="item-row" style="gap:8px;margin-bottom:14px;"><input type="file" id="invFichier" multiple accept=".pdf,.html,.htm,image/*" style="flex:1;min-width:0;"><button type="button" class="btn btn-ghost btn-sm" id="invJoindre" data-mut="1">Joindre</button></div>';
     h+='<div class="section-head"><h3>Détail</h3>'+(d.type==="FACTURE"?'<button class="btn btn-ghost btn-sm" id="avoirBtn" data-mut="1">🔄 Créer un avoir</button>':'')+'</div>';
     (d.lines||[]).forEach(function(l){
       h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(l.designation)+'</div>'
@@ -1907,6 +2081,22 @@
     $("editInvBtn").addEventListener("click", function(){ openDocumentEditModal(d); });
     $("delInvBtn").addEventListener("click", function(){ supprimerDocument(d, "invoices"); });
     $("xlsInvBtn").addEventListener("click", function(){ exportDocumentExcel(d); });
+    $("invJoindre").addEventListener("click", async function(){
+      var fi=$("invFichier"); if(!fi.files||!fi.files.length){ toast("Choisissez d'abord un fichier"); return; }
+      var btn=this; btn.disabled=true; btn.textContent="Envoi…"; var ok=0;
+      for(var i=0;i<fi.files.length;i++){ var f=fi.files[i];
+        if(f.size>15*1024*1024){ toast("Trop volumineux (max 15 Mo) : "+f.name); continue; }
+        try{ var up=await api({action:"uploadFile", filename:f.name, mimeType:f.type||"application/octet-stream", data:await readBase64(f)});
+          await api({action:"joindreFichierDocument", id:d.id, fichier:up.file}); ok++; }
+        catch(e){ toast("Échec : "+f.name+" ("+e.message+")"); } }
+      btn.disabled=false; btn.textContent="Joindre"; if(ok){ toast(ok+" fichier(s) joint(s)"); refresh(); }
+    });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll("[data-retirer-fichier]"), function(b){
+      b.addEventListener("click", function(){
+        if(!confirm("Retirer ce fichier de la facture ?")) return;
+        api({action:"retirerFichierDocument", id:d.id, fichierId:b.getAttribute("data-retirer-fichier")}).then(function(){ toast("Fichier retiré"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
+      });
+    });
     var invSel=$("invStatut");
     if(invSel) invSel.addEventListener("change", function(){
       var val=this.value;
@@ -3230,6 +3420,7 @@
       return "•  "+l.designation+"\n   "+nf(l.quantity)+" × "+nf(l.unitPrice)+" "+dev+" = "+nf(l.total)+" "+dev;
     }).join("\n");
     return "Bonjour "+(d.clientName||"")+",\n\nVotre devis est "+d.numero+" :\n\n"+lignes
+      +(d.notesClient?"\n\n📝 "+d.notesClient:"")
       +"\n\nTotal TTC : "+nf(d.totalTTC)+" "+dev+"\nDevis valable 30 jours. Le devis en PDF suit ce message."
       +"\n\nPour confirmer votre commande, répondez simplement à ce message.\n"+((invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC");
   }
@@ -3313,6 +3504,7 @@
     var phrases = {FACTURE:"Arrêtée la présente facture à la somme de", DEVIS:"Arrêté le présent devis à la somme de", AVOIR:"Arrêté le présent avoir à la somme de", BC:"Arrêté le présent bon de commande à la somme de", BCF:"Arrêté le présent bon de commande à la somme de"};
     var enLettres = avecPrix && phrases[d.type] ? '<div class="lettres">'+phrases[d.type]+' : <b>'+montantEnLettres(d.totalTTC, dev)+' TTC</b></div>' : '';
 
+    var notesClient = d.notesClient ? '<div class="notes"><b>Notes :</b> '+esc(d.notesClient)+'</div>' : '';
     var conditions = d.type==="DEVIS" ? '<div class="cond"><b>Conditions :</b> devis valable 30 jours · délai de fabrication confirmé à la commande · prix'+(lignesTTC?' TTC':' HT')+' en '+dev+'.</div>' : '';
     var signGauche = d.type==="DEVIS" ? "Bon pour accord (date, cachet et signature du client)" : (d.type==="BL" ? "Reçu par (nom, date et signature)" : "Signature client");
     var cachet = (d.type==="FACTURE" && !(opts && opts.sansCachet)) ? '<img class="cachet" src="'+CACHET_DATA_URI+'" alt="">' : '';
@@ -3384,7 +3576,7 @@
       +'<table><thead><tr><th class="c" style="width:34px;">#</th><th>Désignation</th><th class="c" style="width:70px;">Qté</th>'
       +(avecPrix?'<th class="r" style="width:110px;">P.U.'+suf+'</th><th class="r" style="width:120px;">Montant'+suf+'</th>':'')+'</tr></thead>'
       +'<tbody>'+lignesHtml+'</tbody></table>'
-      +'<div class="bas"><div class="g">'+enLettres+conditions+'</div>'+totaux+'</div>'
+      +'<div class="bas"><div class="g">'+enLettres+conditions+notesClient+'</div>'+totaux+'</div>'
       +'<div class="sign"><div class="box">'+signGauche+'</div><div class="box">Cachet et signature '+esc(s.raisonSociale||'')+cachet+'</div></div>'
       +'</div>'
       +(s.piedPage?'<div class="pied">'+esc(s.piedPage)+'</div>':'')
@@ -3715,7 +3907,7 @@
     editingDocId=d.id;
     $("dNumero").value = d.numero||"";
     try{ $("dDate").value = new Date(d.date).toISOString().slice(0,10); }catch(e){ $("dDate").value=""; }
-    $("dNotes").value = d.notes||"";
+    $("dNotes").value = d.notes||""; $("dNotesClient").value = d.notesClient||"";
     docLines = (d.lines||[]).map(function(l){
       var m={ productId:l.productId||"", designation:l.designation, quantity:l.quantity!=null?l.quantity:l.quantite, unitPrice:l.unitPrice!=null?l.unitPrice:l.prixUnitaire, total:l.total, sansImpression:!!l.sansImpression };
       if(l.type){ m.type=l.type; m.remise=l.remise; m.transportAuto=false; m.designationAuto=l.designationAuto; }
@@ -3737,7 +3929,7 @@
     if(!lignesValides.length){ toast("Ajoutez au moins un article valide"); return; }
     var dateVal = $("dDate").value ? new Date($("dDate").value+"T12:00:00").toISOString() : undefined;
     var btn=$("saveDocBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
-    api({action:"updateDocument", id:editingDocId, numero:numero, date:dateVal, notes:$("dNotes").value.trim(), lines:lignesValides}).then(function(){
+    api({action:"updateDocument", id:editingDocId, numero:numero, date:dateVal, notes:$("dNotes").value.trim(), notesClient:$("dNotesClient").value.trim(), lines:lignesValides}).then(function(){
       $("docOverlay").classList.remove("open"); editingDocId=null; toast("Document mis à jour"); refresh();
     }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; btn.textContent="Enregistrer"; });
   });
