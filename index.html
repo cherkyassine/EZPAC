@@ -1532,6 +1532,16 @@
   // Elles entrent dans les totaux comme les autres lignes (TTC) mais pas dans le stock (pas de produit).
   function estSpeciale(l){ return l && (l.type==="transport" || l.type==="remise"); }
   function sousTotalProduits(lignes){ return lignes.reduce(function(t,l){ return t + (estSpeciale(l) ? 0 : Number(l.total||0)); }, 0); }
+  // Les remises ne s'appliquent qu'aux sacs : les clichés, écrans, frais et services en sont exclus.
+  // Reconnaissance automatique par le libellé ; l.horsRemise (true / false) permet de forcer ligne par ligne.
+  var MOTS_HORS_REMISE = /clich|[ée]cran|cadre|forfait|frais|service|maquette|design|infograph|\bBAT\b|montage|calage|livraison|transport|installation|prestation/i;
+  function estHorsRemise(l){
+    if(!l || estSpeciale(l)) return true;
+    if(l.horsRemise===true || l.horsRemise===false) return l.horsRemise;
+    var p = l.productId ? products.find(function(x){ return String(x.id)===String(l.productId); }) : null;
+    return MOTS_HORS_REMISE.test(String(l.designation||"")+" "+String(p ? p.name : ""));
+  }
+  function sousTotalRemisable(lignes){ return lignes.reduce(function(t,l){ return t + (estHorsRemise(l) ? 0 : Number(l.total||0)); }, 0); }
   var MOTIFS_REMISE = { premier:"premier achat" };
   function libelleRemise(r){
     var motif = MOTIFS_REMISE[r.motif];
@@ -1543,14 +1553,15 @@
     return l;
   }
   function recalculerLignesSpeciales(lignes){
-    var s=invoiceSettings||{}, base=sousTotalProduits(lignes);
-    // remises : en % du sous-total des produits, ou montant fixe
+    var s=invoiceSettings||{}, base=sousTotalProduits(lignes), baseSacs=sousTotalRemisable(lignes);
+    var exclusions = lignes.some(function(l){ return !estSpeciale(l) && estHorsRemise(l) && Number(l.total||0)>0; });
+    // remises : en % des sacs uniquement (clichés et services exclus), ou montant fixe
     lignes.forEach(function(l){
       if(l.type!=="remise") return;
       var r=l.remise||{mode:"pct", valeur:0}, v=Number(r.valeur||0);
-      var montant = r.mode==="pct" ? Math.round(base*v)/100 : v;
+      var montant = r.mode==="pct" ? Math.round(baseSacs*v)/100 : v;
       l.quantity=1; l.unitPrice=-Math.abs(montant); l.total=l.unitPrice;
-      if(l.designationAuto!==false) l.designation=libelleRemise(r);
+      if(l.designationAuto!==false) l.designation=libelleRemise(r) + (exclusions ? " sur les sacs" : "");
     });
     // transport : offert automatiquement au-delà du seuil défini dans 🏢 (si le montant n'a pas été modifié à la main)
     var net = base + lignes.reduce(function(t,l){ return t + (l.type==="remise" ? Number(l.total||0) : 0); }, 0);
@@ -1571,7 +1582,7 @@
     recalculerLignesSpeciales(lignes);
     var html='';
     // part de remise appliquée à chaque article (remises en % ou montant fixe réparti au prorata)
-    var baseRemise=sousTotalProduits(lignes), totalRemises=-lignes.reduce(function(t,l){ return t+(l.type==="remise"?Number(l.total||0):0); },0);
+    var baseRemise=sousTotalRemisable(lignes), totalRemises=-lignes.reduce(function(t,l){ return t+(l.type==="remise"?Number(l.total||0):0); },0);
     var tauxRemise = baseRemise>0 && totalRemises>0 ? Math.min(1, totalRemises/baseRemise) : 0;
     var fmtPrix = function(n){ return Number(n||0).toLocaleString("fr-FR",{minimumFractionDigits:2, maximumFractionDigits:3}); };
     lignes.forEach(function(l,idx){
@@ -1611,9 +1622,11 @@
       html+='<span class="total-cell">'+nf(l.total)+'</span>';
       html+='<button type="button" class="rm-btn" data-idx="'+idx+'" title="Supprimer la ligne">✕</button>';
       html+='</div>';
-      var puL=Number(l.unitPrice||0);
-      if(tauxRemise>0 && puL>0)
-        html+='<div class="ln-apres-remise">↳ Après remise : <b>'+fmtPrix(puL*(1-tauxRemise))+' MAD</b> / pièce (−'+fmtPrix(puL*tauxRemise)+') · total '+nf(Math.round(Number(l.total||0)*(1-tauxRemise)*100)/100)+' MAD</div>';
+      var puL=Number(l.unitPrice||0), horsR=estHorsRemise(l);
+      if(totalRemises>0 && puL>0){
+        if(horsR) html+='<div class="ln-apres-remise" style="color:var(--ink-faint);">↳ Hors remise (cliché / service) · <a href="#" class="ln-toggle-remise" data-idx="'+idx+'">inclure dans la remise</a></div>';
+        else html+='<div class="ln-apres-remise">↳ Après remise : <b>'+fmtPrix(puL*(1-tauxRemise))+' MAD</b> / pièce (−'+fmtPrix(puL*tauxRemise)+') · total '+nf(Math.round(Number(l.total||0)*(1-tauxRemise)*100)/100)+' MAD · <a href="#" class="ln-toggle-remise" data-idx="'+idx+'" style="color:var(--ink-faint);">exclure de la remise</a></div>';
+      }
     });
     var tva = invoiceSettings.tvaDefaut!=null?Number(invoiceSettings.tvaDefaut):20;
     var tx=calculerTotauxTTC(lignes, tva);
@@ -1711,6 +1724,13 @@
       }
     });
     el.addEventListener("click", function(e){
+      if(e.target.classList.contains("ln-toggle-remise")){
+        e.preventDefault();
+        var c3=el._cfg, ls3=c3.getLignes().slice(), i3=Number(e.target.getAttribute("data-idx"));
+        ls3[i3]=Object.assign({}, ls3[i3], { horsRemise: !estHorsRemise(ls3[i3]) });
+        c3.setLignes(ls3); renderLinesEditor(containerId, ls3);
+        return;
+      }
       if(e.target.classList.contains("ln-add-transport") || e.target.classList.contains("ln-add-remise")){
         var c2=el._cfg, ls=c2.getLignes().slice();
         if(e.target.classList.contains("ln-add-transport")){
@@ -3916,6 +3936,7 @@
     docLines = (d.lines||[]).map(function(l){
       var m={ productId:l.productId||"", designation:l.designation, quantity:l.quantity!=null?l.quantity:l.quantite, unitPrice:l.unitPrice!=null?l.unitPrice:l.prixUnitaire, total:l.total, sansImpression:!!l.sansImpression };
       if(l.type){ m.type=l.type; m.remise=l.remise; m.transportAuto=false; m.designationAuto=l.designationAuto; }
+      if(l.horsRemise===true || l.horsRemise===false) m.horsRemise=l.horsRemise;
       return m;
     });
     if(!docLines.length) docLines=[nouvelleLigneVide()];
