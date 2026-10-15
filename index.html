@@ -2677,7 +2677,15 @@
     else if(trous.length){ var xsT=trous[0].map(function(pt){ return pt[0]; }), ysT=trous[0].map(function(pt){ return pt[1]; });
       var yT=(Math.min.apply(null, ysT)+Math.max.apply(null, ysT))/2; pointsTension=[[Math.min.apply(null, xsT)+6, yT, 1.4], [Math.max.apply(null, xsT)-6, yT, 1.4]]; }
     var soufFond = p.S>0 && /^(poignee|anse)$/.test(p.type), soufLat = p.S>0 && !soufFond;
-    function demi(x, y){
+    // ouverture du sac : les faces s'écartent vers le haut (en œil), les coutures des côtés restent fermées
+    var ouv = p.type==="box" ? 0 : p.type==="anse" ? Math.min(75, Math.max((p.S||0)*0.6, L*0.17)) : p.type==="poignee" ? Math.min(45, L*0.12) : Math.min(55, L*0.14);
+    function ouverture(x, y){
+      if(!ouv) return 0;
+      var sx=Math.pow(Math.max(0, Math.sin(Math.PI*x/L)), 0.55), t=Math.max(0, Math.min(1, (y/H-0.4)/0.6));
+      return ouv*sx*t*t*(3-2*t);
+    }
+    function demi(x, y){ return demiBase(x, y)+ouverture(x, y); }
+    function demiBase(x, y){
       if(!(p.S>0)) return 1.5;                                   // sac plat : faces cousues sur les côtés
       if(soufLat) return p.S/2;                                  // Premium Box, bretelles : soufflets latéraux
       var S2=p.S/2, tri=Math.max(0, 1-y/S2);                     // soufflet de fond : triangles aux coins du bas
@@ -2703,26 +2711,32 @@
     }
     var gAv=panneau(1), gDos=panneau(-1), communs={ bumpMap:tRelief, alphaMap:tMasque, alphaTest:.5 };
     var av=maillage(gAv, tissu(Object.assign({ map:tAvant, roughnessMap:tBrillance, side:T.FrontSide }, communs))); av.customDepthMaterial=profondeur;
-    maillage(gAv, tissu(Object.assign({ color:interieur, side:T.BackSide }, communs)), false);
+    var hexSac=(p.couleurSac||{}).hex||"#ffffff", cvInt=document.createElement("canvas"); cvInt.width=8; cvInt.height=256;
+    var ix2=cvInt.getContext("2d"), gi=ix2.createLinearGradient(0, 0, 0, 256);
+    gi.addColorStop(0, assombrir(hexSac, .82)); gi.addColorStop(.5, assombrir(hexSac, .55)); gi.addColorStop(1, assombrir(hexSac, .28));
+    ix2.fillStyle=gi; ix2.fillRect(0, 0, 8, 256);
+    var tInt=tex(cvInt, true), matInt=function(extra){ return tissu(Object.assign({ map:tInt, side:T.BackSide, envMapIntensity:.35 }, extra||{})); };
+    maillage(gAv, matInt(communs), false);
     var ds=maillage(gDos, tissu(Object.assign({ map:tDos, side:T.FrontSide }, communs))); ds.customDepthMaterial=profondeur;
-    maillage(gDos, tissu(Object.assign({ color:interieur, side:T.BackSide }, communs)), false);
+    maillage(gDos, matInt(communs), false);
     // côtés : soufflet latéral (pli rentrant en haut, sauf Premium Box rigide) / triangles du soufflet de fond / couture
     var hCote = soufFond ? p.S/2 : H;
     var tReliefCote=tex(relief(Math.max(3, D), hCote, K));
     [[0, -1], [L, 1]].forEach(function(c){
       var g=new T.PlaneGeometry(2, hCote, 10, soufFond ? 12 : 40), pos=g.attributes.position, k, sv, y, t, zh, rentre, gonfle;
       for(k=0;k<pos.count;k++){ sv=pos.getX(k); y=pos.getY(k)+hCote/2; t=1-Math.abs(sv); zh=demi(c[0], y);
-        rentre = soufLat && p.type!=="box" ? zh*0.64*t*Math.max(0, (y-H*0.45)/(H*0.55)) : (soufFond ? zh*0.35*t : 0);
+        rentre = soufLat && p.type!=="box" ? zh*0.64*t*Math.max(0, (y-H*0.45)/(H*0.55)) : 0;
         gonfle = soufLat && p.type!=="box" ? A*0.2*t*Math.sin(Math.PI*y/H) : 0;
         pos.setXYZ(k, c[0]+c[1]*(gonfle-rentre), y, (c[1]>0 ? -sv : sv)*zh); }
       g.computeVertexNormals();
-      maillage(g, tissu({ color:couleurSac, bumpMap:tReliefCote, side:T.DoubleSide }));
+      maillage(g, tissu({ color:couleurSac, bumpMap:tReliefCote, side:T.FrontSide })); maillage(g, matInt(), false);
     });
     // fond : suit le bombé des faces
     (function(){
       var g=new T.PlaneGeometry(L, D, Math.max(30, Math.round(L/4)), 4), pos=g.attributes.position, k, x, t;
       for(k=0;k<pos.count;k++){ x=pos.getX(k)+L/2; t=pos.getY(k)/(D/2); pos.setXYZ(k, x, 0.3, t*(demi(x, 0)+bombe(x, 0))); }
-      g.computeVertexNormals(); maillage(g, tissu({ color:couleurSac, side:T.DoubleSide }), false);
+      g.computeVertexNormals(); maillage(g, tissu({ color:couleurSac, side:T.FrontSide }), false);
+      maillage(g, tissu({ color:new T.Color(assombrir((p.couleurSac||{}).hex||"#ffffff", .3)).convertSRGBToLinear(), side:T.BackSide, envMapIntensity:.3 }), false);
     })();
     // anses : sangle épaisse, légèrement inclinée vers l'extérieur
     if(anses){
@@ -2740,7 +2754,7 @@
         for(i=0;i<=N;i++){ var t=i/N, a=Math.PI*(1-t), mont=Math.sin(a);
           var x=L/2+rxA*Math.cos(a)+Math.sin(a*2)*affaisse*6;
           var y=(H-depart)+(hA+depart)*mont*(1-affaisse*0.12);
-          var xc=Math.max(0, Math.min(L, x)), yc=Math.min(H, y), zp=demi(xc, yc)+bombe(xc, yc)+ep/2+0.4;
+          var xc=Math.max(0, Math.min(L, x)), yc=Math.min(H, y), zp=Math.min.apply(null, [-eA/2, -eA/4, 0, eA/4, eA/2].map(function(d){ var xx=Math.max(0, Math.min(L, xc+d)); return demi(xx, yc)+bombe(xx, yc); }))-ep/2-1.5; // anse cousue contre la face intérieure
           var z=zp+Math.max(0, y-H)*(0.28+affaisse*0.5);
           c.push(new T.Vector3(x, y, sens*z)); }
         for(i=0;i<=N;i++){
@@ -2768,7 +2782,7 @@
     sol.rotation.x=-Math.PI/2; sol.position.y=-hTot/2; sol.receiveShadow=true; scene.add(sol);
     var texAvant=tAvant, texUni=tDos;
     // interaction
-    var auto=true, rotY=-0.55, rotX=0.12, glisse=null, anim=0;
+    var auto=true, rotY=-0.55, rotX=0.36, glisse=null, anim=0;
     zoneEl.addEventListener("pointerdown", function(e){ glisse={ x:e.clientX, y:e.clientY, ry:rotY, rx:rotX }; auto=false; ov.querySelector("#m3dAuto").textContent="▶ Rotation auto"; zoneEl.setPointerCapture(e.pointerId); zoneEl.style.cursor="grabbing"; });
     zoneEl.addEventListener("pointermove", function(e){ if(!glisse) return; rotY=glisse.ry+(e.clientX-glisse.x)*0.01; rotX=Math.max(-0.05, Math.min(0.9, glisse.rx+(e.clientY-glisse.y)*0.006)); });
     zoneEl.addEventListener("pointerup", function(){ glisse=null; zoneEl.style.cursor="grab"; });
@@ -2776,7 +2790,7 @@
     function rendre(){ pivot.rotation.set(0, rotY, 0); cam.position.set(0, hTot*0.04+Math.sin(rotX)*distance, Math.cos(rotX)*distance); cam.lookAt(0, -hTot*0.02, 0); rd.render(scene, cam); }
     (function boucle(){ if(auto) rotY+=0.006; rendre(); anim=requestAnimationFrame(boucle); })();
     ov.querySelector("#m3dAuto").addEventListener("click", function(){ auto=!auto; this.textContent=auto ? "⏸ Rotation auto" : "▶ Rotation auto"; });
-    ov.querySelector("#m3dFace").addEventListener("click", function(){ auto=false; rotY=-0.35; rotX=0.1; ov.querySelector("#m3dAuto").textContent="▶ Rotation auto"; });
+    ov.querySelector("#m3dFace").addEventListener("click", function(){ auto=false; rotY=-0.35; rotX=0.34; ov.querySelector("#m3dAuto").textContent="▶ Rotation auto"; });
     function capture(){ // image carrée 1600 px de la vue actuelle
       return new Promise(function(ok, ko){
         rd.setPixelRatio(1); rd.setSize(2400, 2400, false); cam.aspect=1; cam.updateProjectionMatrix(); rendre();
