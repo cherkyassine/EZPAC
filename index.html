@@ -2099,8 +2099,9 @@
         majApercuCartouche(); $("batCartoucheTitre").scrollIntoView({behavior:"smooth"});
       });
     });
-    initGabaritBat(b);
-    var optsCart=function(){ return { numero:$("batCartNum").value||"1", date:$("batCartDate").value, commentaire:$("batCartComm").value.trim() }; };
+    initGabaritBat(b, function(){ try{ majApercuCartouche(); }catch(e){} });
+    var optsCart=function(){ return { numero:$("batCartNum").value||"1", date:$("batCartDate").value, commentaire:$("batCartComm").value.trim(),
+      produit:gabaritCourant ? texteProduitGabarit(gabaritCourant) : (b.produit||""), dimensions:gabaritCourant ? dimensionsGabarit(gabaritCourant) : "" }; };
     function majApercuCartouche(){ $("batCartApercu").innerHTML=cartoucheSVG(b, optsCart()).replace(/^<\?xml[^>]*>\s*/,"").replace('width="308mm" height="78.8mm"','width="100%" style="max-width:900px;display:block;"'); }
     ["batCartNum","batCartDate","batCartComm"].forEach(function(id){ $(id).addEventListener("input", majApercuCartouche); });
     majApercuCartouche();
@@ -2245,17 +2246,19 @@
     // cotes principales
     cote(0, -16, L, -16, L+" mm", -8);
     cote(-16, 0, -16, H, H+" mm", -4);
-    // informations (en haut à gauche, comme sur les BAT EZPAC)
-    var noms=[], k;
-    for(k=0;k<(p.impression||[]).length;k++) noms.push(p.impression[k].nom);
-    var lignes=[titre+" — face avant",
-      "Fond "+String(sac.nom||"").toLowerCase()+(noms.length?" • Impression "+noms.join(" + "):"")+(avecAnses ? " • Anses "+String(anses.nom||"").toLowerCase() : ""),
-      "Dimensions : "+L+" × "+H+" mm"+(S>0?" • soufflet "+S+" mm":"")+(avecAnses?" • anses "+HA+" mm":"")+" • échelle 1:1"];
-    if(p.client) lignes.push("Client : "+p.client);
-    for(k=0;k<lignes.length;k++) texte(CAL.i, 0, haut+20+(lignes.length-1-k)*6.5, lignes[k], k===0?4.6:4, k===0?"#222222":GRIS, "start", 0);
-    P.cadre={x1:-30, y1:-32, x2:droite+30, y2:haut+20+lignes.length*6.5};
+    // (type de sac, fond, impression, client : imprimés dans la cartouche, pas dans les calques)
+    P.cadre={x1:-30, y1:-32, x2:droite+30, y2:haut+12};
     return P;
   }
+  // Ligne produit de la cartouche : « Sac à poignée (découpe) non-tissé • Fond rose • Impression Vert »
+  var gabaritCourant=null;
+  function texteProduitGabarit(p){
+    var t={poignee:"Sac à poignée (découpe) non-tissé", anse:"Sac à anses non-tissé", bretelle:"Sac à bretelles non-tissé", box:"Premium Box (box bag) non-tissé"}[p.type]||"Sac non-tissé";
+    var imp=(p.impression||[]).map(function(x){ return x.nom; }).filter(Boolean).join(" + ");
+    return t+" • Fond "+String((p.couleurSac||{}).nom||"").toLowerCase()+(imp?" • Impression "+imp:"")
+      +(/^(anse|box)$/.test(p.type) ? " • Anses "+String((p.couleurAnses||{}).nom||"").toLowerCase() : "");
+  }
+  function dimensionsGabarit(p){ var cm=function(v){ return String(Math.round(v)/10).replace(".",","); }; return cm(p.L)+" × "+cm(p.H)+" cm"+(p.S?" · S "+cm(p.S):""); }
   // Aperçu SVG (y inversé, 1 unité = 1 mm)
   function gabaritSVG(P){
     var c=P.cadre, h=c.y2-c.y1, out=[], i, j, o, d;
@@ -2324,7 +2327,7 @@
     }
     return g;
   }
-  function initGabaritBat(b){
+  function initGabaritBat(b, siChange){
     var cle="ezpac_gabarit_"+b.id, g=null;
     try{ g=JSON.parse(localStorage.getItem(cle)||"null"); }catch(e){ g=null; }
     if(!g) g=gabaritDepuisBat(b);
@@ -2347,7 +2350,7 @@
         impression:(b.couleurs||[]).map(function(c){ return { nom:c.nom }; }), client:b.nomCartouche||b.clientName||"" };
     }
     function maj(){
-      var p=params();
+      var p=params(); gabaritCourant=p; if(siChange) siChange();
       try{ localStorage.setItem(cle, JSON.stringify({ type:p.type, L:p.L, H:p.H, S:p.S, HA:p.HA, sac:p.couleurSac.hex, anses:p.couleurAnses.hex })); }catch(e){}
       $("gabApercu").innerHTML=gabaritSVG(geometrieSac(p)).replace(/^<\?xml[^>]*>\s*/,"").replace(/width="[\d.]+mm" height="[\d.]+mm"/,'style="width:100%;max-width:560px;height:auto;"');
     }
@@ -2390,7 +2393,7 @@
     var hdr=function(px,py,w,t,mid){ return '<rect x="'+px+'" y="'+py+'" width="'+w+'" height="42" fill="'+OR+'" stroke="#000" stroke-width="1.5"/>'+txt(mid?px+w/2:px+21, py+29, t, 700, 24, "#fff", mid?"middle":"start"); };
     var d=o.date ? new Date(o.date+"T12:00:00") : new Date();
     var dateTxt=("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();
-    var client=(b.nomCartouche||b.clientName||"").toUpperCase(), dims=b.dimensions||"", num=String(o.numero||"1");
+    var client=(b.nomCartouche||b.clientName||"").toUpperCase(), dims=b.dimensions||o.dimensions||"", num=String(o.numero||"1");
     var tel=String(s.telephone||"+212 6 16 16 35 36").split("/")[0].trim();
     var c='';
     c+=box(250,813,336,195)+box(586,813,290,57)+box(876,813,125,57)+box(1001,813,204,57);
@@ -2423,6 +2426,7 @@
     return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="308mm" height="78.8mm" viewBox="230 1556 1540 394">\n'
       +'<rect x="230" y="1556" width="1540" height="394" fill="#fff"/>\n'
       +txt(250,1596,"Date :  "+dateTxt,600,32,"#111",null,OS)+'\n'
+      +(o.produit ? txt(1750,1596,o.produit,600,ajuste(o.produit,1080,30),"#111","end",OS)+'\n' : '')
       +'<g transform="translate(0 850)">'+c+'</g>\n</svg>\n';
   }
   // Script Illustrator : insère la cartouche (SVG) dans le document ouvert, en bas du plan de travail actif
