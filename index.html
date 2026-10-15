@@ -2033,6 +2033,7 @@
       +'<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="mkLegende" checked> Légende (modèle, dimensions, couleurs)</label></div>';
     h+='<div id="mkApercu" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;text-align:center;"></div>';
     h+='<div class="item-row" style="gap:6px;margin:8px 0 14px;flex-wrap:wrap;"><button type="button" class="btn btn-primary btn-sm" id="mkPng">⬇ Mockup (image JPG)</button>'
+      +'<button type="button" class="btn btn-gold btn-sm" id="mk3d">🧊 Mockup 3D</button>'
       +'<button type="button" class="btn btn-ghost btn-sm" id="mkJoindre" data-mut="1">📎 Joindre le mockup au dernier BAT</button></div>';
     // cartouche
     var dernier=lesBats[lesBats.length-1];
@@ -2508,19 +2509,160 @@
         var a=document.createElement("a"); a.href=URL.createObjectURL(bl); a.download=nomMk()+".jpg"; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
       }).catch(function(e){ toast("Échec du mockup : "+e.message); });
     });
-    $("mkJoindre").addEventListener("click", async function(){
+    async function joindreAuBat(bl, nomFichier, btn){
       var lesBats=batsDeVersion(b), dernier=lesBats[lesBats.length-1];
-      if(!dernier){ toast("Ajoutez d'abord un BAT (+ Nouveau BAT)"); return; }
+      if(!dernier){ toast("Ajoutez d'abord un BAT (+ Nouveau BAT)"); return false; }
+      var res=await envoyerFichiersBat([new File([bl], nomFichier, {type:"image/jpeg"})], btn);
+      if(res) majVersionBat(b, dernier.id, function(v){ v.fichiers=(v.fichiers||[]).concat(res); }, "Mockup joint au BAT n°"+dernier.n);
+      return !!res;
+    }
+    $("mkJoindre").addEventListener("click", async function(){
       var btn=this; btn.disabled=true;
-      try{
-        var bl=await mockupPNG(mockupSVG(gabaritCourant, opts()), 2000), fichier=new File([bl], nomMk()+".jpg", {type:"image/jpeg"});
-        var res=await envoyerFichiersBat([fichier], btn);
-        if(res) majVersionBat(b, dernier.id, function(v){ v.fichiers=(v.fichiers||[]).concat(res); }, "Mockup joint au BAT n°"+dernier.n);
-      }catch(e){ toast("Échec : "+e.message); }
+      try{ await joindreAuBat(await mockupPNG(mockupSVG(gabaritCourant, opts()), 2000), nomMk()+".jpg", btn); }
+      catch(e){ toast("Échec : "+e.message); }
       btn.disabled=false;
+    });
+    $("mk3d").addEventListener("click", function(){
+      if(!gabaritCourant) return;
+      ouvrirMockup3D(gabaritCourant, opts(), nomMk()+"_3D", joindreAuBat).catch(function(e){ toast("Vue 3D impossible : "+e.message); });
     });
     maj();
     return maj;
+  }
+  // ----- Mockup 3D -----
+  var promesseThree=null;
+  function chargerThree(){
+    if(window.THREE) return Promise.resolve(window.THREE);
+    if(!promesseThree) promesseThree=new Promise(function(ok, ko){
+      var sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+      sc.onload=function(){ ok(window.THREE); }; sc.onerror=function(){ promesseThree=null; ko(new Error("bibliothèque 3D non chargée (connexion ?)")); };
+      document.head.appendChild(sc);
+    });
+    return promesseThree;
+  }
+  function chargerImage(src){ return new Promise(function(ok, ko){ var im=new Image(); im.onload=function(){ ok(im); }; im.onerror=function(){ ko(new Error("image")); }; im.src=src; }); }
+  // Texture d'une face (tissu + coutures + visuel éventuel). Le canvas couvre 0..L × 0..H (mm), y inversé.
+  function textureFace3D(P, p, o, image){
+    var L=p.L, H=p.H, k=Math.min(4, 2048/Math.max(L, H)), cv=document.createElement("canvas"), i, j, q;
+    cv.width=Math.round(L*k); cv.height=Math.round(H*k);
+    var cx=cv.getContext("2d"), X=function(v){ return v*k; }, Y=function(v){ return (H-v)*k; };
+    cx.fillStyle=(p.couleurSac||{}).hex||"#ffffff"; cx.fillRect(0, 0, cv.width, cv.height);
+    // grain du non-tissé
+    var nb=Math.round(cv.width*cv.height/18);
+    for(i=0;i<nb;i++){ cx.fillStyle=Math.random()<.5 ? "rgba(0,0,0,.045)" : "rgba(255,255,255,.07)"; cx.fillRect(Math.random()*cv.width, Math.random()*cv.height, 1.4, 1.4); }
+    // coutures (pointillés du gabarit, dans le corps du sac)
+    cx.strokeStyle=assombrir((p.couleurSac||{}).hex||"#ffffff", .6); cx.globalAlpha=.55; cx.lineWidth=Math.max(1, .45*k);
+    for(i=0;i<P.length;i++){ q=P[i];
+      if(q.calque!=="Gabarit sac" || q.t!=="poly" || q.fill || !q.dash) continue;
+      cx.setLineDash([q.dash[0]*k, q.dash[1]*k]); cx.beginPath();
+      for(j=0;j<q.pts.length;j++){ if(j) cx.lineTo(X(q.pts[j][0]), Y(q.pts[j][1])); else cx.moveTo(X(q.pts[j][0]), Y(q.pts[j][1])); }
+      if(q.ferme) cx.closePath(); cx.stroke();
+    }
+    cx.setLineDash([]); cx.globalAlpha=1;
+    // visuel du client dans la zone d'impression (même calcul que le mockup à plat)
+    var zone=null; for(i=0;i<P.length;i++) if(P[i].calque==="Zone d'impression" && P[i].t==="poly") zone=P[i].pts;
+    if(image && zone){
+      var zx1=zone[0][0], zy1=zone[0][1], zl=zone[2][0]-zx1, zh=zone[2][1]-zy1, t=(o.taille||80)/100, r=image.naturalWidth/image.naturalHeight || 1;
+      var iw=zl*t, ih=iw/r; if(ih>zh*t){ ih=zh*t; iw=ih*r; }
+      var ix=zx1+(zl-iw)/2, iy=zy1+zh-ih-(zh-ih)*((o.position==null?45:o.position)/100);
+      var off=document.createElement("canvas"); off.width=Math.max(1, Math.round(iw*k)); off.height=Math.max(1, Math.round(ih*k));
+      var ox=off.getContext("2d"); ox.drawImage(image, 0, 0, off.width, off.height);
+      if(o.teinte){ ox.globalCompositeOperation="source-in"; ox.fillStyle=o.teinte; ox.fillRect(0, 0, off.width, off.height); }
+      cx.globalAlpha=.94; cx.drawImage(off, X(ix), Y(iy+ih)); cx.globalAlpha=1;
+    }
+    return cv;
+  }
+  async function ouvrirMockup3D(p, o, nom, joindre){
+    var T=await chargerThree(), P=geometrieSac(p), L=p.L, H=p.H, D=p.S>0 ? p.S : 8, i, q;
+    var image=o.image ? await chargerImage(o.image) : null;
+    // pièces 2D reprises du gabarit
+    var corps=null, trous=[], anses=null;
+    for(i=0;i<P.length;i++){ q=P[i];
+      if(q.calque!=="Gabarit sac" || q.t!=="poly" || !q.fill) continue;
+      if(q.trou) trous.push(q.pts);
+      else if(!corps) corps=q.pts;
+      else if(/^(anse|box)$/.test(p.type) && Math.max.apply(null, q.pts.map(function(pt){ return pt[1]; }))>H+1) anses=q.pts;
+    }
+    var forme=function(pts){ return new T.Shape(pts.map(function(pt){ return new T.Vector2(pt[0], pt[1]); })); };
+    var sh=forme(corps); trous.forEach(function(t){ sh.holes.push(new T.Path(t.map(function(pt){ return new T.Vector2(pt[0], pt[1]); }))); });
+    var hTot=anses ? Math.max.apply(null, anses.map(function(pt){ return pt[1]; })) : H, maxDim=Math.max(L, hTot, D);
+    // fenêtre
+    var ov=document.createElement("div");
+    ov.style.cssText="position:fixed;inset:0;z-index:200;background:rgba(15,18,22,.78);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;";
+    ov.innerHTML='<div style="background:#efece7;border-radius:14px;overflow:hidden;width:min(92vw,820px);box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+      +'<div id="m3dZone" style="width:100%;aspect-ratio:1/1;max-height:72vh;cursor:grab;touch-action:none;"></div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding:10px;background:#fff;">'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="m3dAuto">⏸ Rotation auto</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="m3dFace">↺ Vue de face</button>'
+      +'<button type="button" class="btn btn-primary btn-sm" id="m3dJpg">⬇ Image 3D (JPG)</button>'
+      +'<button type="button" class="btn btn-gold btn-sm" id="m3dJoindre" data-mut="1">📎 Joindre au dernier BAT</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="m3dFermer">✕ Fermer</button></div>'
+      +'<div class="hint" style="text-align:center;padding:0 10px 10px;background:#fff;">Glisser pour tourner le sac · molette pour zoomer</div></div>';
+    document.body.appendChild(ov);
+    var zoneEl=ov.querySelector("#m3dZone"), larg=zoneEl.clientWidth, haut=zoneEl.clientHeight;
+    var rd=new T.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true });
+    rd.setPixelRatio(Math.min(2, window.devicePixelRatio||1)); rd.setSize(larg, haut); rd.outputEncoding=T.sRGBEncoding;
+    rd.shadowMap.enabled=true; rd.shadowMap.type=T.PCFSoftShadowMap; zoneEl.appendChild(rd.domElement);
+    var scene=new T.Scene(); scene.background=new T.Color("#efece7");
+    var cam=new T.PerspectiveCamera(30, larg/haut, 1, maxDim*40);
+    var distance=maxDim*2.6; cam.position.set(0, hTot*0.12, distance); cam.lookAt(0, 0, 0);
+    scene.add(new T.HemisphereLight(0xffffff, 0x8a8070, 0.8));
+    var soleil=new T.DirectionalLight(0xffffff, 0.75); soleil.position.set(-maxDim*0.8, maxDim*1.6, maxDim*1.4); soleil.castShadow=true;
+    soleil.shadow.mapSize.set(2048, 2048); var sc=soleil.shadow.camera; sc.left=sc.bottom=-maxDim*1.5; sc.right=sc.top=maxDim*1.5; sc.near=1; sc.far=maxDim*6;
+    scene.add(soleil);
+    var dosLum=new T.DirectionalLight(0xffffff, 0.25); dosLum.position.set(maxDim, maxDim*0.5, -maxDim); scene.add(dosLum);
+    // matériaux
+    var texture=function(cv){ var t=new T.CanvasTexture(cv); t.encoding=T.sRGBEncoding; t.anisotropy=rd.capabilities.getMaxAnisotropy(); t.repeat.set(1/L, 1/H); return t; };
+    var mat=function(opt){ return new T.MeshStandardMaterial(Object.assign({ roughness:.92, metalness:0 }, opt)); };
+    var texAvant=texture(textureFace3D(P, p, o, image)), texUni=texture(textureFace3D(P, p, o, null));
+    var couleurSac=new T.Color((p.couleurSac||{}).hex||"#ffffff"), interieur=couleurSac.clone().multiplyScalar(.78);
+    var sac=new T.Group(), pivot=new T.Group(); pivot.add(sac); scene.add(pivot);
+    var maillage=function(geo, m, ombre){ var me=new T.Mesh(geo, m); me.castShadow=ombre!==false; me.receiveShadow=true; sac.add(me); return me; };
+    var geoFace=new T.ShapeGeometry(sh, 24);
+    maillage(geoFace, mat({ map:texAvant, side:T.FrontSide })).position.z=D/2;                       // face avant imprimée
+    maillage(geoFace, mat({ color:interieur, side:T.BackSide })).position.z=D/2;                     // intérieur
+    var dos=maillage(geoFace, mat({ map:texUni, side:T.FrontSide })); dos.rotation.y=Math.PI; dos.position.set(L, 0, -D/2); // dos (uni)
+    maillage(geoFace, mat({ color:interieur, side:T.FrontSide })).position.z=-D/2;                   // intérieur du dos
+    [0, L].forEach(function(x){ var c=maillage(new T.PlaneGeometry(D, H), mat({ color:couleurSac, side:T.DoubleSide })); c.rotation.y=Math.PI/2; c.position.set(x, H/2, 0); });
+    var fond=maillage(new T.PlaneGeometry(L, D), mat({ color:couleurSac, side:T.DoubleSide })); fond.rotation.x=-Math.PI/2; fond.position.set(L/2, 0.3, 0);
+    if(anses){
+      var geoAnse=new T.ShapeGeometry(forme(anses), 48), couleurAnses=new T.Color((p.couleurAnses||{}).hex||"#ffffff");
+      [D/2+0.4, -D/2-0.4].forEach(function(z){ maillage(geoAnse, mat({ color:couleurAnses, side:T.DoubleSide })).position.z=z; });
+    }
+    sac.position.set(-L/2, -hTot/2, 0);
+    var sol=new T.Mesh(new T.PlaneGeometry(maxDim*10, maxDim*10), new T.ShadowMaterial({ opacity:.18 }));
+    sol.rotation.x=-Math.PI/2; sol.position.y=-hTot/2; sol.receiveShadow=true; scene.add(sol);
+    // interaction
+    var auto=true, rotY=-0.55, rotX=0.12, glisse=null, anim=0;
+    zoneEl.addEventListener("pointerdown", function(e){ glisse={ x:e.clientX, y:e.clientY, ry:rotY, rx:rotX }; auto=false; ov.querySelector("#m3dAuto").textContent="▶ Rotation auto"; zoneEl.setPointerCapture(e.pointerId); zoneEl.style.cursor="grabbing"; });
+    zoneEl.addEventListener("pointermove", function(e){ if(!glisse) return; rotY=glisse.ry+(e.clientX-glisse.x)*0.01; rotX=Math.max(-0.5, Math.min(0.9, glisse.rx+(e.clientY-glisse.y)*0.006)); });
+    zoneEl.addEventListener("pointerup", function(){ glisse=null; zoneEl.style.cursor="grab"; });
+    zoneEl.addEventListener("wheel", function(e){ e.preventDefault(); distance=Math.max(maxDim*1.2, Math.min(maxDim*6, distance*(e.deltaY>0 ? 1.08 : 0.93))); }, { passive:false });
+    function rendre(){ pivot.rotation.set(rotX, rotY, 0); cam.position.set(0, hTot*0.12, distance); cam.lookAt(0, 0, 0); rd.render(scene, cam); }
+    (function boucle(){ if(auto) rotY+=0.006; rendre(); anim=requestAnimationFrame(boucle); })();
+    ov.querySelector("#m3dAuto").addEventListener("click", function(){ auto=!auto; this.textContent=auto ? "⏸ Rotation auto" : "▶ Rotation auto"; });
+    ov.querySelector("#m3dFace").addEventListener("click", function(){ auto=false; rotY=-0.35; rotX=0.1; ov.querySelector("#m3dAuto").textContent="▶ Rotation auto"; });
+    function capture(){ // image carrée 1600 px de la vue actuelle
+      return new Promise(function(ok, ko){
+        rd.setPixelRatio(1); rd.setSize(1600, 1600, false); cam.aspect=1; cam.updateProjectionMatrix(); rendre();
+        rd.domElement.toBlob(function(bl){
+          rd.setPixelRatio(Math.min(2, window.devicePixelRatio||1)); rd.setSize(larg, haut); cam.aspect=larg/haut; cam.updateProjectionMatrix(); rendre();
+          bl ? ok(bl) : ko(new Error("capture"));
+        }, "image/jpeg", 0.92);
+      });
+    }
+    ov.querySelector("#m3dJpg").addEventListener("click", function(){
+      capture().then(function(bl){ var a=document.createElement("a"); a.href=URL.createObjectURL(bl); a.download=nom+".jpg"; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000); })
+        .catch(function(e){ toast("Échec : "+e.message); });
+    });
+    ov.querySelector("#m3dJoindre").addEventListener("click", async function(){
+      var btn=this; btn.disabled=true;
+      try{ if(await joindre(await capture(), nom+".jpg", btn)) fermer(); } catch(e){ toast("Échec : "+e.message); }
+      btn.disabled=false;
+    });
+    function fermer(){ cancelAnimationFrame(anim); rd.dispose(); rd.forceContextLoss(); texAvant.dispose(); texUni.dispose(); ov.remove(); }
+    ov.querySelector("#m3dFermer").addEventListener("click", fermer);
+    ov.addEventListener("click", function(e){ if(e.target===ov) fermer(); });
   }
   // Script combiné : cartouche en bas du plan de travail (calque « Cartouche »), calques techniques centrés au-dessus
   function scriptIllustratorBatComplet(p, svg, nom){
