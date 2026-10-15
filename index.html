@@ -295,6 +295,7 @@
         <button class="tab-btn" id="tabInvoices" data-tab="invoices">Factures</button>
         <button class="tab-btn" id="tabOrdersAll" data-tab="ordersAll">Commandes</button>
         <button class="tab-btn" id="tabCarriers" data-tab="carriers">Transporteurs</button>
+        <button class="tab-btn" id="tabBats" data-tab="bats">🎨 BAT</button>
       </div>
       <div class="filter-row" id="orderFilterRow" style="display:none;">
         <select id="orderStatusFilter">
@@ -752,7 +753,7 @@
   var CFG = { url:"", key:"" };
   var appRole = "admin";
   var clients=[], orders=[], products=[], suppliers=[], documents=[], achats=[], tarifs=[], rappels=[], transporteurs=[], etiquettes=[];
-  var currentId = { clients:null, products:null, suppliers:null, quotes:null, invoices:null, carriers:null };
+  var currentId = { clients:null, products:null, suppliers:null, quotes:null, invoices:null, carriers:null, bats:null };
   var editingClientId=null, editingProductId=null, editingSupplierId=null;
   var activeTab = "clients";
   var invoiceSettings = { raisonSociale:'EZPAC', adresse:'Meryem 4 Z.I. Ain Atiq 12020 – Maroc', ice:'003254351000070', rc:'167169',
@@ -857,7 +858,7 @@
         designation:l.designation, quantite:l.quantity!=null?l.quantity:l.quantite, prixUnitaire:l.unitPrice!=null?l.unitPrice:l.prixUnitaire, total:l.total }); }); });
       var feuilles = { "Clients":clients, "Commandes":orders, "Devis-Factures-BL":documents, "Lignes documents":lignesDocs, "Produits":products,
         "Mouvements stock":mouvements, "Fournisseurs":suppliers, "Achats":achats, "Tarifs clients":tarifs, "Rappels":rappels,
-        "Transporteurs":transporteurs, "Etiquettes":etiquettes, "Parametres":[invoiceSettings] };
+        "Transporteurs":transporteurs, "Etiquettes":etiquettes, "BAT":bats.map(function(b){ return { Titre:b.titre, Client:b.clientName, Dimensions:b.dimensions, Versions:(b.versions||[]).length, Statut:statutProjetBat(b).txt }; }), "Parametres":[invoiceSettings] };
       var wb=XLSX.utils.book_new();
       Object.keys(feuilles).forEach(function(nom){ XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(plat(feuilles[nom])), nom.slice(0,31)); });
       XLSX.writeFile(wb, "ezpac-crm-sauvegarde-"+new Date().toISOString().slice(0,10)+".xlsx");
@@ -933,7 +934,7 @@
     }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
   });
   // ===================== SAUVEGARDE / RESTAURATION =====================
-  var ORDRE_RESTAURATION = ["parametres","compteurs","fournisseurs","transporteurs","clients","produits","commandes","tarifs","achats","etiquettes","documents","rappels","mouvements_stock"];
+  var ORDRE_RESTAURATION = ["parametres","compteurs","fournisseurs","transporteurs","clients","produits","commandes","tarifs","achats","etiquettes","documents","rappels","mouvements_stock","bats"];
   $("sauvegardeBtn").addEventListener("click", function(){
     var btn=this; btn.disabled=true; $("sauvegardeStatus").textContent="Préparation de la sauvegarde…";
     api({action:"sauvegardeComplete"}).then(function(res){
@@ -1011,7 +1012,7 @@
     return api({action:"load"}).then(function(res){
       clients=res.clients||[]; orders=res.orders||[]; products=res.products||[];
       suppliers=res.suppliers||[]; documents=res.documents||[]; achats=res.achats||[];
-      tarifs=res.tarifs||[]; rappels=res.rappels||[]; transporteurs=res.transporteurs||[]; etiquettes=res.etiquettes||[];
+      tarifs=res.tarifs||[]; rappels=res.rappels||[]; transporteurs=res.transporteurs||[]; etiquettes=res.etiquettes||[]; batsDisponible=res.bats!==null; bats=res.bats||[];
       if(res.settings) invoiceSettings=corrigerParametres(res.settings);
       clients.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
       products.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
@@ -1075,12 +1076,13 @@
     else if(activeTab==="quotes") renderQuoteList();
     else if(activeTab==="ordersAll") renderOrdersAllList();
     else if(activeTab==="carriers") renderCarrierList();
+    else if(activeTab==="bats") renderBatList();
     else renderInvoiceList();
   }
-  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"📎 Ajouter des factures (fichiers)", ordersAll:"", carriers:"+ Nouveau transporteur" };
+  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"📎 Ajouter des factures (fichiers)", ordersAll:"", carriers:"+ Nouveau transporteur", bats:"+ Nouveau BAT" };
   function setTab(tab){
     activeTab=tab;
-    ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll","Carriers"].forEach(function(t){
+    ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll","Carriers","Bats"].forEach(function(t){
       $("tab"+t).classList.toggle("active", t.toLowerCase()===tab.toLowerCase());
     });
     $("searchInput").placeholder="Rechercher…";
@@ -1099,12 +1101,14 @@
   $("tabInvoices").addEventListener("click",function(){ setTab("invoices"); });
   $("tabOrdersAll").addEventListener("click",function(){ setTab("ordersAll"); });
   $("tabCarriers").addEventListener("click",function(){ setTab("carriers"); });
+  $("tabBats").addEventListener("click",function(){ setTab("bats"); });
   $("newBtn").addEventListener("click", function(){
     if(activeTab==="clients") openClientModal(null);
     else if(activeTab==="products") openProductModal(null);
     else if(activeTab==="suppliers") openSupplierModal(null);
     else if(activeTab==="carriers") openCarrierModal(null);
     else if(activeTab==="invoices") ouvrirImportFactures();
+    else if(activeTab==="bats") openBatModal(null, {});
   });
   $("searchInput").addEventListener("input", renderList);
   $("orderStatusFilter").addEventListener("change", renderList);
@@ -1330,6 +1334,9 @@
     h+='<button type="button" class="btn btn-ghost btn-sm" data-gen="BC" data-order="'+esc(o.id)+'" data-mut="1">📄 Bon de commande</button>';
     h+='<button type="button" class="btn btn-ghost btn-sm" data-gen="BL" data-order="'+esc(o.id)+'" data-mut="1">🚚 Bon de livraison</button>';
     h+='<button type="button" class="btn btn-gold btn-sm" data-gen="FACTURE" data-order="'+esc(o.id)+'" data-mut="1">🧾 Facture</button>';
+    var batsCmd=bats.filter(function(bt){ return String(bt.orderId)===String(o.id); });
+    h+= batsCmd.length ? '<button type="button" class="btn btn-ghost btn-sm" data-voir-bat="'+esc(batsCmd[0].id)+'">🎨 BAT ('+esc(statutProjetBat(batsCmd[0]).txt)+')</button>'
+                       : '<button type="button" class="btn btn-ghost btn-sm" data-bat-order="'+esc(o.id)+'" data-mut="1">🎨 BAT</button>';
     h+='</div></div></div></div>';
     return h;
   }
@@ -1356,6 +1363,13 @@
       e.stopPropagation();
       if(!fi.files || !fi.files.length){ toast("Choisissez d'abord un fichier"); return; }
       uploadFiles(o, fi.files, up);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-bat-order="'+o.id+'"]'), function(btn){
+      btn.addEventListener("click", function(e){ e.stopPropagation(); openBatModal(null, { clientId:o.clientId, orderId:o.id }); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-voir-bat]'), function(btn){
+      if(btn._lie) return; btn._lie=true;
+      btn.addEventListener("click", function(e){ e.stopPropagation(); currentId.bats=btn.getAttribute("data-voir-bat"); setTab("bats"); });
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-gen][data-order="'+o.id+'"]'), function(btn){
       btn.addEventListener("click", function(e){ e.stopPropagation(); genererDocumentPourCommande(btn.getAttribute("data-gen"), o.id, btn); });
@@ -1907,6 +1921,356 @@
       if(kind) currentId[kind]=null;
       toast("Document "+d.numero+" supprimé"); return refresh();
     }).catch(function(e){ toast("Échec : "+e.message); });
+  }
+
+  // ===================== BAT : fichiers clients, versions et cartouche =====================
+  // Un projet de BAT par client / commande : fichiers originaux du client, versions intermédiaires,
+  // BAT envoyés (n° 1, 2, 3…) avec leur statut, et la cartouche (même modèle que le BAT papier EZPAC)
+  // à insérer dans Illustrator : script .jsx, copier-coller du SVG ou fichier SVG.
+  var bats=[], batsDisponible=true;
+  var STATUTS_VERSION=[["brouillon","Brouillon"],["envoye","Envoyé au client"],["corriger","À corriger"],["valide","✅ Validé par le client"]];
+  var COULEURS_BAT=[["Blanc","#ffffff"],["Noir","#1c1c1c"],["Rouge","#e10a26"],["Rose","#c4547a"],["Bleu marine","#1b3a63"],["Bleu","#1a2a9c"],["Vert","#1c9954"],["Jaune","#f6bf3a"],["Orange","#e6631a"],["Or","#c9a227"],["Argent","#a8a9ad"],["Gris","#9a9a9a"]];
+  function nomVersion(v){ return v.type==="bat" ? "BAT n°"+v.n : (v.type==="original" ? "Original" : "Version "+v.n+" (intermédiaire)"); }
+  function batsDeVersion(b){ return (b.versions||[]).filter(function(v){ return v.type==="bat"; }); }
+  function statutProjetBat(b){
+    var vs=b.versions||[], valide=vs.filter(function(v){ return v.statut==="valide"; }).pop();
+    if(valide) return { txt:"✅ Validé ("+nomVersion(valide)+")", cls:"pill-success" };
+    var der=vs[vs.length-1];
+    if(!der) return { txt:"Nouveau", cls:"" };
+    if(der.statut==="envoye") return { txt:nomVersion(der)+" envoyé", cls:"" };
+    if(der.statut==="corriger") return { txt:nomVersion(der)+" à corriger", cls:"pill-danger" };
+    return { txt:nomVersion(der)+" en cours", cls:"" };
+  }
+  function chargerPolicesCartouche(){
+    if($("policesCartouche")) return;
+    var l=document.createElement("link"); l.id="policesCartouche"; l.rel="stylesheet";
+    l.href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:wght@500;600;700&family=Open+Sans:wght@400;600&display=swap";
+    document.head.appendChild(l);
+  }
+  function renderBatList(){
+    var el=$("listScroll");
+    if(!batsDisponible){ el.innerHTML='<div class="empty-hint">Module BAT pas encore installé :<br>lancez le script SQL <b>1-colonnes.sql</b> dans Supabase,<br>puis déployez la dernière fonction ezpac-api.</div>'; return; }
+    var q=($("searchInput").value||"").toLowerCase().trim();
+    var liste=bats.filter(function(b){ if(!q) return true; return [b.titre,b.clientName,b.nomCartouche,b.dimensions].some(function(v){ return v&&String(v).toLowerCase().indexOf(q)!==-1; }); })
+      .sort(function(a,b2){ return String(b2.updatedAt||b2.createdAt||"").localeCompare(String(a.updatedAt||a.createdAt||"")); });
+    if(!liste.length){ el.innerHTML='<div class="empty-hint">'+(bats.length?"Aucun BAT ne correspond.":"Aucun BAT pour l'instant.<br>Cliquez sur « + Nouveau BAT »,<br>ou sur 🎨 BAT dans une commande.")+'</div>'; return; }
+    el.innerHTML=liste.map(function(b){
+      var st=statutProjetBat(b);
+      return '<div class="row-card'+(b.id===currentId.bats?" active":"")+'" data-id="'+esc(b.id)+'">'
+        +'<div class="name">🎨 '+esc(b.titre||"BAT")+'</div>'
+        +'<div class="meta"><span>'+esc(b.clientName||"")+'</span><span>'+fmtDate(b.updatedAt||b.createdAt)+'</span></div>'
+        +'<div class="price"><span class="pill '+st.cls+'">'+esc(st.txt)+'</span>'+(b.dimensions?' · '+esc(b.dimensions):'')+'</div></div>';
+    }).join("");
+    Array.prototype.forEach.call(el.querySelectorAll(".row-card"), function(card){ card.addEventListener("click", function(){ openRow("bats", card.getAttribute("data-id")); }); });
+  }
+  function htmlFichiers(fichiers, cle){
+    return (fichiers||[]).map(function(f){
+      var img=/\.(png|jpe?g|webp|gif|svg)$/i.test(f.name||"");
+      return '<div class="doc-fichier">'+(img?'<img src="'+esc(f.url)+'" alt="" style="width:46px;height:46px;object-fit:contain;border-radius:6px;background:#f3f1ec;">':'📄')
+        +' <a href="'+esc(f.url)+'" target="_blank" rel="noopener">'+esc(f.name||"fichier")+'</a>'
+        +(f.sizeBytes?'<span class="hint">'+Math.max(1,Math.round(f.sizeBytes/1024))+' Ko</span>':'')
+        +'<button type="button" class="btn btn-ghost btn-sm" data-bat-retirer="'+esc(cle)+'" data-fichier="'+esc(f.id)+'" data-mut="1" title="Retirer" style="color:var(--danger);padding:3px 8px;">✕</button></div>';
+    }).join("");
+  }
+  function renderBatDetail(b){
+    chargerPolicesCartouche();
+    var cl=clients.find(function(x){ return String(x.id)===String(b.clientId); })||{};
+    var cmd=b.orderId ? orders.find(function(o){ return String(o.id)===String(b.orderId); }) : null;
+    var st=statutProjetBat(b), versions=(b.versions||[]).slice().reverse(), lesBats=batsDeVersion(b);
+    var h='<div class="detail-inner">';
+    h+='<div class="head-block"><div><h2>🎨 '+esc(b.titre||"BAT")+'</h2><div class="sub">'+esc(b.clientName||"")+(cmd?' · commande « '+esc(cmd.title||cmd.productName||"")+' »':'')+' · <span class="pill '+st.cls+'">'+esc(st.txt)+'</span></div></div>';
+    h+='<div class="head-actions"><button class="icon-btn" id="editBatBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="delBatBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
+    h+='<div class="info-grid">';
+    h+='<div class="info-item"><div class="lbl">Produit</div><div class="val">'+esc(b.produit||"—")+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Dimensions</div><div class="val">'+esc(b.dimensions||"—")+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Couleurs d\'impression</div><div class="val">'+((b.couleurs||[]).map(function(c){ return '<span title="'+esc(c.nom)+'" style="display:inline-block;width:16px;height:16px;border-radius:4px;border:1px solid #bbb;vertical-align:-3px;background:'+esc(c.hex)+';"></span> '+esc(c.nom); }).join(" &nbsp;")||"—")+'</div></div>';
+    h+='<div class="info-item"><div class="lbl">Téléphone client</div><div class="val">'+esc(cl.phone||"—")+'</div></div>';
+    h+='</div>';
+    if(b.notes) h+='<div class="notes-block" style="white-space:pre-line;">'+esc(b.notes)+'</div>';
+    // fichiers originaux
+    h+='<div class="section-head"><h3>📁 Fichiers originaux du client ('+(b.originaux||[]).length+')</h3></div>';
+    h+=htmlFichiers(b.originaux, "originaux");
+    h+='<div class="item-row" style="gap:8px;margin-bottom:14px;"><input type="file" id="batOrigFichier" multiple style="flex:1;min-width:0;"><button type="button" class="btn btn-ghost btn-sm" id="batOrigJoindre" data-mut="1">Joindre</button></div>';
+    // versions
+    h+='<div class="section-head"><h3>🔁 Versions et BAT ('+(b.versions||[]).length+')</h3><div style="display:flex;gap:6px;">'
+      +'<button class="btn btn-ghost btn-sm" id="batAddInter" data-mut="1">+ Version intermédiaire</button><button class="btn btn-primary btn-sm" id="batAddBat" data-mut="1">+ Nouveau BAT</button></div></div>';
+    if(!versions.length) h+='<div class="empty-hint" style="padding:16px;">Aucune version. Ajoutez une version intermédiaire (travail en cours) ou un BAT (à envoyer au client).</div>';
+    versions.forEach(function(v){
+      h+='<div class="item-card" style="padding:12px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">'
+        +'<div><b>'+(v.type==="bat"?"📤 ":"✏️ ")+esc(nomVersion(v))+'</b> <span class="hint">· '+fmtDate(v.date)+(v.dateValidation?' · validé le '+fmtDate(v.dateValidation).split(" · ")[0]:'')+'</span></div>'
+        +'<div style="display:flex;gap:6px;align-items:center;"><select class="sel" data-bat-statut="'+esc(v.id)+'" data-mut="1">'+STATUTS_VERSION.map(function(s){ return '<option value="'+s[0]+'"'+(v.statut===s[0]?' selected':'')+'>'+s[1]+'</option>'; }).join("")+'</select>'
+        +'<button type="button" class="btn btn-ghost btn-sm" data-bat-supprver="'+esc(v.id)+'" data-mut="1" title="Supprimer la version" style="color:var(--danger);">🗑</button></div></div>';
+      h+=htmlFichiers(v.fichiers, v.id);
+      h+='<div class="item-row" style="gap:8px;margin:6px 0;"><input type="file" data-bat-fich="'+esc(v.id)+'" multiple style="flex:1;min-width:0;"><button type="button" class="btn btn-ghost btn-sm" data-bat-joindre="'+esc(v.id)+'" data-mut="1">Joindre</button></div>';
+      h+='<textarea data-bat-comm="'+esc(v.id)+'" rows="2" placeholder="Commentaires / retours du client sur cette version…" style="width:100%;" data-mut="1">'+esc(v.commentaire||"")+'</textarea>';
+      if(v.type==="bat") h+='<div class="item-row" style="gap:6px;margin-top:6px;"><button type="button" class="btn btn-gold btn-sm" data-bat-wa="'+esc(v.id)+'">💬 Envoyer au client (WhatsApp)</button><button type="button" class="btn btn-ghost btn-sm" data-bat-cart="'+esc(v.id)+'">🏷️ Cartouche de ce BAT</button></div>';
+      h+='</div>';
+    });
+    // cartouche
+    var dernier=lesBats[lesBats.length-1];
+    h+='<div class="section-head" id="batCartoucheTitre"><h3>🏷️ Cartouche pour Illustrator</h3></div>';
+    h+='<div class="field-row"><div class="field"><label>N° BAT</label><input id="batCartNum" type="number" min="1" step="1" value="'+(dernier?dernier.n:1)+'"></div>'
+      +'<div class="field"><label>Date</label><input id="batCartDate" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div></div>';
+    h+='<div class="field"><label>Commentaire imprimé dans la cartouche <span class="hint">(facultatif, sinon lignes vides pour le client)</span></label><textarea id="batCartComm" rows="2"></textarea></div>';
+    h+='<div id="batCartApercu" style="border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;overflow:auto;"></div>';
+    h+='<div class="item-row" style="gap:6px;margin-top:8px;flex-wrap:wrap;">'
+      +'<button type="button" class="btn btn-primary btn-sm" id="batCartJsx">⬇ Script Illustrator (.jsx)</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="batCartCopier">📋 Copier (coller dans Illustrator)</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="batCartSvg">⬇ SVG</button></div>';
+    h+='<div class="hint" style="margin-top:6px;line-height:1.5;">Script : dans Illustrator, ouvrez le BAT puis <b>Fichier → Scripts → Autre script…</b> → choisissez le fichier .jsx : la cartouche est ajoutée en bas du plan de travail (textes modifiables, ou vectorisés si vous le demandez).<br>Copier : cliquez puis <b>Ctrl+V</b> dans Illustrator. Polices utilisées : Fira Sans Condensed et Open Sans (dossier Polices_a_installer).</div>';
+    h+='</div>';
+    $("colDetail").innerHTML=h;
+
+    // ----- actions -----
+    $("editBatBtn").addEventListener("click", function(){ openBatModal(b); });
+    $("delBatBtn").addEventListener("click", function(){
+      if(!confirm("Supprimer le projet de BAT « "+(b.titre||"")+" » et son historique ? (les fichiers restent dans le stockage)")) return;
+      api({action:"deleteBat", id:b.id}).then(function(){ currentId.bats=null; toast("BAT supprimé"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
+    });
+    $("batOrigJoindre").addEventListener("click", async function(){
+      var nf2=await envoyerFichiersBat($("batOrigFichier").files, this); if(!nf2) return;
+      sauverBat(Object.assign({}, b, { originaux:(b.originaux||[]).concat(nf2) }), nf2.length+" fichier(s) original(aux) ajouté(s)");
+    });
+    $("batAddInter").addEventListener("click", function(){ ajouterVersionBat(b, "intermediaire"); });
+    $("batAddBat").addEventListener("click", function(){ ajouterVersionBat(b, "bat"); });
+    var col=$("colDetail");
+    Array.prototype.forEach.call(col.querySelectorAll("[data-bat-joindre]"), function(btn){
+      btn.addEventListener("click", async function(){
+        var vid=btn.getAttribute("data-bat-joindre"), fi=col.querySelector('[data-bat-fich="'+vid+'"]');
+        var nf2=await envoyerFichiersBat(fi.files, btn); if(!nf2) return;
+        majVersionBat(b, vid, function(v){ v.fichiers=(v.fichiers||[]).concat(nf2); }, nf2.length+" fichier(s) ajouté(s)");
+      });
+    });
+    Array.prototype.forEach.call(col.querySelectorAll("[data-bat-retirer]"), function(btn){
+      btn.addEventListener("click", function(){
+        if(!confirm("Retirer ce fichier ?")) return;
+        var cle=btn.getAttribute("data-bat-retirer"), fid=btn.getAttribute("data-fichier");
+        if(cle==="originaux") sauverBat(Object.assign({}, b, { originaux:(b.originaux||[]).filter(function(f){ return f.id!==fid; }) }), "Fichier retiré");
+        else majVersionBat(b, cle, function(v){ v.fichiers=(v.fichiers||[]).filter(function(f){ return f.id!==fid; }); }, "Fichier retiré");
+      });
+    });
+    Array.prototype.forEach.call(col.querySelectorAll("[data-bat-statut]"), function(sel){
+      sel.addEventListener("change", function(){
+        var val=sel.value;
+        majVersionBat(b, sel.getAttribute("data-bat-statut"), function(v){
+          v.statut=val; if(val==="valide") v.dateValidation=new Date().toISOString(); else delete v.dateValidation;
+          if(val==="envoye" && !v.dateEnvoi) v.dateEnvoi=new Date().toISOString();
+        }, "Statut mis à jour");
+      });
+    });
+    Array.prototype.forEach.call(col.querySelectorAll("[data-bat-comm]"), function(ta){
+      ta.addEventListener("change", function(){ var t=ta.value; majVersionBat(b, ta.getAttribute("data-bat-comm"), function(v){ v.commentaire=t; }, "Commentaire enregistré"); });
+    });
+    Array.prototype.forEach.call(col.querySelectorAll("[data-bat-supprver]"), function(btn){
+      btn.addEventListener("click", function(){
+        if(!confirm("Supprimer cette version de l'historique ?")) return;
+        var vid=btn.getAttribute("data-bat-supprver");
+        sauverBat(Object.assign({}, b, { versions:(b.versions||[]).filter(function(v){ return v.id!==vid; }) }), "Version supprimée");
+      });
+    });
+    Array.prototype.forEach.call(col.querySelectorAll("[data-bat-wa]"), function(btn){
+      btn.addEventListener("click", function(){
+        var v=(b.versions||[]).find(function(x){ return x.id===btn.getAttribute("data-bat-wa"); }); if(!v) return;
+        var tel=cl.phone; if(!tel){ toast("Ce client n'a pas de numéro de téléphone"); return; }
+        var liens=(v.fichiers||[]).filter(function(f){ return /\.(pdf|png|jpe?g)$/i.test(f.name||""); }).map(function(f){ return "📎 "+f.url; });
+        var msg="Bonjour "+(cl.contactPerson||b.clientName||"")+",\n\nVoici le BAT n°"+v.n+" de votre "+(b.titre||"commande")+(b.dimensions?" ("+b.dimensions+")":"")+".\n"
+          +(liens.length?"\n"+liens.join("\n")+"\n":"\n(le BAT suit ce message)\n")
+          +"\nMerci de vérifier les textes, les couleurs et les dimensions, puis de nous répondre « BAT validé » ou de nous indiquer les corrections.\n\n"+((invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC");
+        openWhatsapp(tel, msg);
+        if(v.statut==="brouillon") majVersionBat(b, v.id, function(x){ x.statut="envoye"; x.dateEnvoi=new Date().toISOString(); }, "BAT marqué « Envoyé au client »");
+      });
+    });
+    Array.prototype.forEach.call(col.querySelectorAll("[data-bat-cart]"), function(btn){
+      btn.addEventListener("click", function(){
+        var v=(b.versions||[]).find(function(x){ return x.id===btn.getAttribute("data-bat-cart"); }); if(!v) return;
+        $("batCartNum").value=v.n;
+        majApercuCartouche(); $("batCartoucheTitre").scrollIntoView({behavior:"smooth"});
+      });
+    });
+    var optsCart=function(){ return { numero:$("batCartNum").value||"1", date:$("batCartDate").value, commentaire:$("batCartComm").value.trim() }; };
+    function majApercuCartouche(){ $("batCartApercu").innerHTML=cartoucheSVG(b, optsCart()).replace(/^<\?xml[^>]*>\s*/,"").replace('width="308mm" height="78.8mm"','width="100%" style="max-width:900px;display:block;"'); }
+    ["batCartNum","batCartDate","batCartComm"].forEach(function(id){ $(id).addEventListener("input", majApercuCartouche); });
+    majApercuCartouche();
+    var nomCart=function(){ return ("Cartouche_BAT_"+(b.nomCartouche||b.clientName||"client")+"_n"+($("batCartNum").value||"1")).replace(/[^\w\-]+/g,"_"); };
+    $("batCartSvg").addEventListener("click", function(){ telechargerTexte(cartoucheSVG(b, optsCart()), nomCart()+".svg", "image/svg+xml"); });
+    $("batCartJsx").addEventListener("click", function(){ telechargerTexte(scriptIllustratorCartouche(cartoucheSVG(b, optsCart()), nomCart()), nomCart()+".jsx", "application/javascript"); });
+    $("batCartCopier").addEventListener("click", function(){
+      var svg=cartoucheSVG(b, optsCart());
+      var fin=function(){ toast("Cartouche copiée : dans Illustrator, faites Ctrl+V"); };
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(svg).then(fin).catch(function(){ copierSecours(svg); fin(); });
+      else { copierSecours(svg); fin(); }
+    });
+  }
+  function copierSecours(t){ var ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); }catch(e){} ta.remove(); }
+  function telechargerTexte(texte, nom, type){
+    var a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([texte],{type:type+";charset=utf-8"})); a.download=nom;
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  async function envoyerFichiersBat(liste, btn){
+    if(!liste || !liste.length){ toast("Choisissez d'abord un fichier"); return null; }
+    var lib=btn.textContent; btn.disabled=true; btn.textContent="Envoi…"; var res=[];
+    for(var i=0;i<liste.length;i++){ var f=liste[i];
+      if(f.size>15*1024*1024){ toast("Trop volumineux (max 15 Mo) : "+f.name); continue; }
+      try{ res.push((await api({action:"uploadFile", filename:f.name, mimeType:f.type||"application/octet-stream", data:await readBase64(f)})).file); }
+      catch(e){ toast("Échec : "+f.name+" ("+e.message+")"); } }
+    btn.disabled=false; btn.textContent=lib;
+    return res.length ? res : null;
+  }
+  function sauverBat(b, message){
+    return api({action:"saveBat", bat:b}).then(function(r){ currentId.bats=r.id||b.id; if(message) toast(message); return refresh(); })
+      .catch(function(e){ toast("Échec : "+e.message); });
+  }
+  function majVersionBat(b, vid, fn, message){
+    var copie=JSON.parse(JSON.stringify(b)), v=(copie.versions||[]).find(function(x){ return x.id===vid; }); if(!v) return;
+    fn(v);
+    var valide=(copie.versions||[]).some(function(x){ return x.statut==="valide"; }); copie.statut = valide ? "valide" : (v.statut||"");
+    sauverBat(copie, message);
+  }
+  function ajouterVersionBat(b, type){
+    var memeType=(b.versions||[]).filter(function(v){ return v.type===type; });
+    var n=memeType.reduce(function(m,v){ return Math.max(m, Number(v.n)||0); }, 0)+1;
+    var v={ id:"v"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), type:type, n:n, date:new Date().toISOString(), fichiers:[], commentaire:"", statut:"brouillon" };
+    sauverBat(Object.assign({}, b, { versions:(b.versions||[]).concat([v]) }), (type==="bat"?"BAT n°"+n:"Version "+n)+" ajouté(e) : joignez-y les fichiers");
+  }
+
+  // ----- cartouche (reproduction du modèle EZPAC, coordonnées identiques au fichier Cartouche_BAT) -----
+  function cartoucheSVG(b, o){
+    var s=invoiceSettings||{};
+    var x=function(t){ return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); };
+    var F="'Fira Sans Condensed', 'Fira Sans', sans-serif", OS="'Open Sans', sans-serif", OR="#ff2a14";
+    var txt=function(px,py,t,poids,taille,fill,anchor,fam){ return '<text x="'+px+'" y="'+py+'"'+(anchor?' text-anchor="'+anchor+'"':'')+' font-family="'+(fam||F)+'" font-weight="'+poids+'" font-size="'+taille+'" fill="'+fill+'">'+x(t)+'</text>'; };
+    var ajuste=function(t, largeur, taille){ var n=String(t||"").length; return n*taille*0.48>largeur ? Math.max(14, Math.floor(largeur/(n*0.48))) : taille; };
+    var box=function(px,py,w,h){ return '<rect x="'+px+'" y="'+py+'" width="'+w+'" height="'+h+'" fill="#fff" stroke="#000" stroke-width="1.5"/>'; };
+    var hdr=function(px,py,w,t,mid){ return '<rect x="'+px+'" y="'+py+'" width="'+w+'" height="42" fill="'+OR+'" stroke="#000" stroke-width="1.5"/>'+txt(mid?px+w/2:px+21, py+29, t, 700, 24, "#fff", mid?"middle":"start"); };
+    var d=o.date ? new Date(o.date+"T12:00:00") : new Date();
+    var dateTxt=("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();
+    var client=(b.nomCartouche||b.clientName||"").toUpperCase(), dims=b.dimensions||"", num=String(o.numero||"1");
+    var tel=String(s.telephone||"+212 6 16 16 35 36").split("/")[0].trim();
+    var c='';
+    c+=box(250,813,336,195)+box(586,813,290,57)+box(876,813,125,57)+box(1001,813,204,57);
+    c+=box(586,911,475,97)+box(1061,911,144,97)+box(250,1008,444,78)+box(694,1008,511,78);
+    c+=hdr(250,771,336,"Fiche d’impression")+hdr(586,771,290,"Client")+hdr(876,771,125,"N° BAT")+hdr(1001,771,204,"Dimensions")+hdr(586,870,619,"Séparation des couleurs",true);
+    c+=txt(592,849,client,600,ajuste(client,278,26),"#111")+txt(898,849,num,600,26,"#111")+txt(1019,849,dims,600,ajuste(dims,180,26),"#111");
+    if(typeof LOGO_DATA_URI!=="undefined") c+='<image xlink:href="'+LOGO_DATA_URI+'" href="'+LOGO_DATA_URI+'" x="258" y="821" width="250" height="81" preserveAspectRatio="xMinYMid meet"/>';
+    ["Meryem 4 Z.I. Ain Atiq / Temara - Maroc","Téléphone : "+tel,"E-mail : "+(s.email||"ezpacsarl@gmail.com"),"Site web : "+String(s.siteWeb||"ezpac.ma").replace(/^https?:\/\//,"")].forEach(function(t,i){ c+=txt(262,921+i*24,t,500,19,"#111"); });
+    ["En validant ce BAT, vous reconnaissez être responsable","de tout contenu validé et de toute erreur constatée","après validation."].forEach(function(t,i){ c+=txt(262,1032+i*22,t,500,18,"#111"); });
+    c+=txt(707,1036,"Validation du client :",500,19,"#111")+txt(707,1070,"Date :",500,19,"#111");
+    // séparation des couleurs : pastilles + nom, puis le nombre de couleurs
+    var cs=(b.couleurs||[]).slice(0,6);
+    cs.forEach(function(col,i){
+      var px=602+i*65, hex=col.hex||"#ffffff", clair=/^#(f{3}|f{6}|fefefe|fdfdfd)$/i.test(hex);
+      c+='<rect x="'+px+'" y="926" width="55" height="45" fill="'+x(hex)+'" stroke="'+(clair?"#999":"none")+'" stroke-width="1.5"/>'+txt(px+27.5,995,col.nom,500,ajuste(col.nom,62,19),"#111","middle");
+    });
+    var texteC=b.texteCouleurs || (cs.length ? cs.length+" couleur"+(cs.length>1?"s directes":" directe") : "");
+    if(texteC && cs.length<=3) c+=txt(602+cs.length*65+28,955,texteC,500,19,"#555");
+    c+='<rect x="1073" y="926" width="55" height="45" fill="#12239e" stroke="none" stroke-width="1.5"/>'+txt(1100.5,995,"Plan",500,19,"#111","middle");
+    c+='<rect x="1138" y="926" width="55" height="45" fill="#fff" stroke="#ddd" stroke-width="1.5"/>'+txt(1165.5,995,"Trans.",500,19,"#111","middle");
+    c+='<line x1="1061" y1="911" x2="1061" y2="1008" stroke="#000" stroke-width="1.5"/>';
+    // commentaire : lignes pointillées (et texte éventuel, coupé en lignes)
+    c+=box(1235,813,515,273)+hdr(1235,771,515,"Commentaire");
+    var lignesY=[851,892,934,975,1017,1058], mots=String(o.commentaire||"").split(/\s+/).filter(Boolean), lignesT=[], cour="";
+    mots.forEach(function(m){ if((cour+" "+m).trim().length>50){ lignesT.push(cour.trim()); cour=m; } else cour+=" "+m; }); if(cour.trim()) lignesT.push(cour.trim());
+    lignesY.forEach(function(ly,i){
+      c+='<line x1="1245" y1="'+ly+'" x2="1740" y2="'+ly+'" stroke="#888" stroke-width="1.5" stroke-dasharray="6 5"/>';
+      if(lignesT[i]) c+=txt(1250,ly-9,lignesT[i],500,20,"#1a2a9c");
+    });
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="308mm" height="78.8mm" viewBox="230 1556 1540 394">\n'
+      +'<rect x="230" y="1556" width="1540" height="394" fill="#fff"/>\n'
+      +txt(250,1596,"Date :  "+dateTxt,600,32,"#111",null,OS)+'\n'
+      +'<g transform="translate(0 850)">'+c+'</g>\n</svg>\n';
+  }
+  // Script Illustrator : insère la cartouche (SVG) dans le document ouvert, en bas du plan de travail actif
+  function scriptIllustratorCartouche(svg, nom){
+    // accents écrits en \uXXXX : le script reste lisible par Illustrator quel que soit l'encodage du système
+    return scriptIllustratorBrut(svg, nom).replace(/[\u0080-￿]/g, function(ch){ return "\\u"+("000"+ch.charCodeAt(0).toString(16)).slice(-4); });
+  }
+  function scriptIllustratorBrut(svg, nom){
+    return "// EZPAC - cartouche BAT. Illustrator : Fichier > Scripts > Autre script... puis choisir ce fichier.\n"
+      +"#target illustrator\n(function(){\n"
+      +"  if(app.documents.length===0){ alert('Ouvrez d\\'abord le document du BAT dans Illustrator.'); return; }\n"
+      +"  var doc=app.activeDocument;\n"
+      +"  var svg="+JSON.stringify(svg)+";\n"
+      +"  var f=new File(Folder.temp+'/"+nom+".svg'); f.encoding='UTF-8'; f.open('w'); f.write(svg); f.close();\n"
+      +"  var g=doc.groupItems.createFromFile(f);\n"
+      +"  var ab=doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect, larg=ab[2]-ab[0], marge=Math.max(10, larg*0.04);\n"
+      +"  if(g.width>larg-2*marge){ var k=(larg-2*marge)/g.width*100; g.resize(k,k); }\n"
+      +"  g.position=[ab[0]+(larg-g.width)/2, ab[3]+marge+g.height];\n"
+      +"  g.name='Cartouche BAT';\n"
+      +"  if(confirm('Cartouche ajoutée en bas du plan de travail.\\n\\nVectoriser les textes (contours) ?\\n(Oui = comme la version COURBES, pas besoin des polices à l\\'impression)')){\n"
+      +"    var vect=function(gr){ for(var i=gr.textFrames.length-1;i>=0;i--){ gr.textFrames[i].createOutline(); } for(var j=0;j<gr.groupItems.length;j++){ vect(gr.groupItems[j]); } };\n"
+      +"    vect(g);\n  }\n"
+      +"  doc.selection=null; g.selected=true;\n"
+      +"})();\n";
+  }
+  // ----- création / modification d'un projet de BAT -----
+  var batEdition=null, batCouleursEdit=[];
+  function openBatModal(b, preset){
+    preset=preset||{};
+    var ov=$("batOverlay");
+    if(!ov){
+      ov=document.createElement("div"); ov.className="overlay"; ov.id="batOverlay";
+      ov.innerHTML='<div class="modal"><h3 id="batModalTitre">Nouveau BAT</h3><form id="batForm">'
+        +'<div class="field"><label>Client *</label><input id="batClient" list="batClientsListe" placeholder="Nom du client" autocomplete="off"><datalist id="batClientsListe"></datalist></div>'
+        +'<div class="field"><label>Commande liée</label><select id="batCommande"><option value="">— Aucune —</option></select></div>'
+        +'<div class="field"><label>Titre du BAT *</label><input id="batTitre" placeholder="Ex. : Box bag Taj Mahaj"></div>'
+        +'<div class="field"><label>Nom sur la cartouche</label><input id="batNomCart" placeholder="Par défaut : nom du client (en majuscules)"></div>'
+        +'<div class="field"><label>Produit / description</label><input id="batProduit" placeholder="Ex. : Box bag non-tissé — fond rose, impression blanc, anses blanches"></div>'
+        +'<div class="field"><label>Dimensions (cartouche)</label><input id="batDims" placeholder="Ex. : 240x270x170mm"></div>'
+        +'<div class="field"><label>Couleurs d\'impression (séparation des couleurs)</label><div id="batCouleurs"></div>'
+        +'<div class="item-row" style="gap:6px;flex-wrap:wrap;margin-top:6px;"><select id="batCouleurPreset">'+COULEURS_BAT.map(function(c){ return '<option value="'+c[1]+'">'+c[0]+'</option>'; }).join("")+'</select><button type="button" class="btn btn-ghost btn-sm" id="batCouleurAjout">+ Ajouter la couleur</button></div></div>'
+        +'<div class="field"><label>Texte des couleurs</label><input id="batTexteCouleurs" placeholder="Automatique : « 2 couleurs directes »"></div>'
+        +'<div class="field"><label>Notes internes</label><textarea id="batNotes" rows="2"></textarea></div>'
+        +'<div class="modal-actions"><button type="button" class="btn btn-ghost" id="batAnnuler">Annuler</button><button type="submit" class="btn btn-primary" id="batEnregistrer">Enregistrer</button></div></form></div>';
+      document.body.appendChild(ov);
+      ov.addEventListener("click", function(e){ if(e.target===ov) ov.classList.remove("open"); });
+      $("batAnnuler").addEventListener("click", function(){ ov.classList.remove("open"); });
+      $("batClient").addEventListener("change", function(){ remplirCommandesBat(""); });
+      $("batCouleurAjout").addEventListener("click", function(){ var sel=$("batCouleurPreset"); batCouleursEdit.push({ nom:sel.options[sel.selectedIndex].text, hex:sel.value }); dessinerCouleursBat(); });
+      $("batCouleurs").addEventListener("input", function(e){ var i=e.target.getAttribute("data-i"), k=e.target.getAttribute("data-k"); if(i!=null){ batCouleursEdit[i][k]=e.target.value; } });
+      $("batCouleurs").addEventListener("click", function(e){ var i=e.target.getAttribute("data-suppr"); if(i!=null){ batCouleursEdit.splice(Number(i),1); dessinerCouleursBat(); } });
+      $("batForm").addEventListener("submit", enregistrerBat);
+    }
+    batEdition=b||null;
+    $("batModalTitre").textContent = b ? "Modifier le BAT" : "Nouveau BAT";
+    $("batClientsListe").innerHTML=clients.slice().sort(function(a,c){ return String(a.name).localeCompare(String(c.name),"fr"); }).map(function(c){ return '<option value="'+esc(c.name)+'">'; }).join("");
+    var clientId=b ? b.clientId : preset.clientId, cl=clients.find(function(x){ return String(x.id)===String(clientId); });
+    $("batClient").value = cl ? cl.name : (b ? (b.clientName||"") : "");
+    remplirCommandesBat(b ? (b.orderId||"") : (preset.orderId||""));
+    var cmd=preset.orderId ? orders.find(function(o){ return String(o.id)===String(preset.orderId); }) : null;
+    $("batTitre").value = b ? (b.titre||"") : (cmd ? (cmd.title||cmd.productName||"") : "");
+    $("batNomCart").value = b ? (b.nomCartouche||"") : "";
+    $("batProduit").value = b ? (b.produit||"") : "";
+    $("batDims").value = b ? (b.dimensions||"") : "";
+    $("batTexteCouleurs").value = b ? (b.texteCouleurs||"") : "";
+    $("batNotes").value = b ? (b.notes||"") : "";
+    batCouleursEdit = b ? JSON.parse(JSON.stringify(b.couleurs||[])) : [];
+    dessinerCouleursBat();
+    ov.classList.add("open");
+  }
+  function remplirCommandesBat(choix){
+    var nom=$("batClient").value.trim(), cl=clients.find(function(x){ return String(x.name).toLowerCase()===nom.toLowerCase(); });
+    var os=cl ? orders.filter(function(o){ return String(o.clientId)===String(cl.id); }) : [];
+    $("batCommande").innerHTML='<option value="">— Aucune —</option>'+os.map(function(o){ return '<option value="'+esc(o.id)+'"'+(String(o.id)===String(choix)?' selected':'')+'>'+esc((o.title||o.productName||"Commande")+" · "+fmtDate(o.createdAt).split(" · ")[0])+'</option>'; }).join("");
+  }
+  function dessinerCouleursBat(){
+    $("batCouleurs").innerHTML = batCouleursEdit.length ? batCouleursEdit.map(function(c,i){
+      return '<div class="item-row" style="gap:6px;margin-bottom:4px;"><input type="color" data-i="'+i+'" data-k="hex" value="'+esc(c.hex||"#ffffff")+'" style="width:44px;padding:0;"><input data-i="'+i+'" data-k="nom" value="'+esc(c.nom||"")+'" placeholder="Nom (ex. Rose, Pantone 7425 C)" style="flex:1;"><button type="button" class="btn btn-ghost btn-sm" data-suppr="'+i+'" style="color:var(--danger);">✕</button></div>';
+    }).join("") : '<div class="hint">Aucune couleur : choisissez-en une ci-dessous puis « Ajouter ».</div>';
+  }
+  function enregistrerBat(e){
+    e.preventDefault();
+    var nom=$("batClient").value.trim(), titre=$("batTitre").value.trim();
+    if(!nom || !titre){ toast("Le client et le titre sont obligatoires"); return; }
+    var cl=clients.find(function(x){ return String(x.name).toLowerCase()===nom.toLowerCase(); });
+    var b=Object.assign({}, batEdition||{ versions:[], originaux:[], statut:"" }, {
+      clientId: cl ? cl.id : "", clientName: cl ? cl.name : nom, orderId:$("batCommande").value, titre:titre,
+      nomCartouche:$("batNomCart").value.trim(), produit:$("batProduit").value.trim(), dimensions:$("batDims").value.trim(),
+      couleurs:batCouleursEdit.filter(function(c){ return c.nom||c.hex; }), texteCouleurs:$("batTexteCouleurs").value.trim(), notes:$("batNotes").value.trim() });
+    var btn=$("batEnregistrer"); btn.disabled=true;
+    api({action:"saveBat", bat:b}).then(function(r){
+      $("batOverlay").classList.remove("open"); toast(batEdition?"BAT mis à jour":"BAT créé : ajoutez les fichiers originaux du client");
+      currentId.bats=r.id; if(activeTab!=="bats") setTab("bats"); return refresh();
+    }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; });
   }
 
   // ===================== IMPORT DE FACTURES EXISTANTES =====================
@@ -3403,6 +3767,11 @@
       var tr=transporteurs.find(function(x){return String(x.id)===String(currentId.carriers);});
       if(!tr){ $("colDetail").innerHTML='<div class="placeholder">Transporteur introuvable.</div>'; return; }
       renderCarrierDetail(tr);
+    } else if(activeTab==="bats"){
+      if(!currentId.bats){ $("colDetail").innerHTML='<div class="placeholder">Sélectionnez un BAT<br>ou créez-en un nouveau.</div>'; return; }
+      var bt=bats.find(function(x){return String(x.id)===String(currentId.bats);});
+      if(!bt){ $("colDetail").innerHTML='<div class="placeholder">BAT introuvable.</div>'; return; }
+      renderBatDetail(bt);
     } else {
       if(!currentId.invoices){ $("colDetail").innerHTML='<div class="placeholder">Sélectionnez une facture<br>dans la liste.</div>'; return; }
       var inv=documents.find(function(x){return String(x.id)===String(currentId.invoices);});
