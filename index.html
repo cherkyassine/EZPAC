@@ -2006,6 +2006,18 @@
       if(v.type==="bat") h+='<div class="item-row" style="gap:6px;margin-top:6px;"><button type="button" class="btn btn-gold btn-sm" data-bat-wa="'+esc(v.id)+'">💬 Envoyer au client (WhatsApp)</button><button type="button" class="btn btn-ghost btn-sm" data-bat-cart="'+esc(v.id)+'">🏷️ Cartouche de ce BAT</button></div>';
       h+='</div>';
     });
+    // calques techniques
+    h+='<div class="section-head"><h3>📐 Calques techniques (gabarit du sac)</h3></div>';
+    h+='<div class="field-row"><div class="field"><label>Type de sac</label><select id="gabType">'+GABARIT_TYPES.map(function(t){ return '<option value="'+t[0]+'">'+esc(t[1])+'</option>'; }).join("")+'</select></div>'
+      +'<div class="field"><label>Format</label><select id="gabFormat"></select></div></div>';
+    h+='<div class="field-row"><div class="field"><label>Largeur (mm)</label><input id="gabL" type="number" min="50" step="5"></div><div class="field"><label>Hauteur (mm)</label><input id="gabH" type="number" min="50" step="5"></div>'
+      +'<div class="field"><label>Soufflet (mm)</label><input id="gabS" type="number" min="0" step="5"></div><div class="field" id="gabHAChamp"><label>Hauteur anses (mm)</label><input id="gabHA" type="number" min="0" step="5"></div></div>';
+    h+='<div class="field-row"><div class="field"><label>Couleur du sac</label><select id="gabCoulSac"></select></div><div class="field" id="gabCoulAnsesChamp"><label>Couleur des anses</label><select id="gabCoulAnses"></select></div></div>';
+    h+='<div id="gabApercu" style="border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;max-height:520px;overflow:auto;text-align:center;"></div>';
+    h+='<div class="item-row" style="gap:6px;margin-top:8px;flex-wrap:wrap;">'
+      +'<button type="button" class="btn btn-primary btn-sm" id="gabJsx">⬇ Script Illustrator (.jsx)</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="gabSvg">⬇ SVG</button></div>';
+    h+='<div class="hint" style="margin-top:6px;margin-bottom:14px;line-height:1.5;">Dans Illustrator : <b>Fichier → Scripts → Autre script…</b> → le fichier .jsx. Le script crée 4 calques verrouillés à l\'échelle 1:1, centrés sur le plan de travail : <b>Gabarit sac</b> (sous le dessin), <b>Zone d\'impression</b>, <b>Cotes</b> et <b>Infos</b>. Les couleurs d\'impression sont celles du BAT.</div>';
     // cartouche
     var dernier=lesBats[lesBats.length-1];
     h+='<div class="section-head" id="batCartoucheTitre"><h3>🏷️ Cartouche pour Illustrator</h3></div>';
@@ -2087,6 +2099,7 @@
         majApercuCartouche(); $("batCartoucheTitre").scrollIntoView({behavior:"smooth"});
       });
     });
+    initGabaritBat(b);
     var optsCart=function(){ return { numero:$("batCartNum").value||"1", date:$("batCartDate").value, commentaire:$("batCartComm").value.trim() }; };
     function majApercuCartouche(){ $("batCartApercu").innerHTML=cartoucheSVG(b, optsCart()).replace(/^<\?xml[^>]*>\s*/,"").replace('width="308mm" height="78.8mm"','width="100%" style="max-width:900px;display:block;"'); }
     ["batCartNum","batCartDate","batCartComm"].forEach(function(id){ $(id).addEventListener("input", majApercuCartouche); });
@@ -2133,6 +2146,239 @@
     sauverBat(Object.assign({}, b, { versions:(b.versions||[]).concat([v]) }), (type==="bat"?"BAT n°"+n:"Version "+n)+" ajouté(e) : joignez-y les fichiers");
   }
 
+  // ===================== CALQUES TECHNIQUES (gabarits de sacs) =====================
+  // Code ES3 volontairement simple : les mêmes fonctions servent à l'aperçu dans le CRM et sont recopiées dans le script Illustrator (.jsx).
+  // Formats du site (mm). L = largeur, H = hauteur, S = soufflet, HA = hauteur des anses au-dessus du sac.
+  var GABARIT_TYPES=[["poignee","Sac à poignée (découpe)"],["anse","Sac à anses"],["bretelle","Sac à bretelles"],["box","Premium Box (box bag)"]];
+  var GABARIT_FORMATS={
+    poignee:[["20 × 25 cm",200,250,0,0],["22 × 29 cm",220,290,0,0],["25 × 35 cm",250,350,0,0],["30 × 37 cm",300,370,0,0],["40 × 50 cm · soufflet 10",400,500,100,0],["50 × 50 cm · soufflet 10",500,500,100,0]],
+    anse:[["30 × 30 cm",300,300,0,250],["30 × 30 cm · soufflet 10",300,300,100,250],["30 × 39 cm",300,390,0,250],["39 × 40 cm",390,400,0,250],["40 × 50 cm · soufflet 10",400,500,100,250],["50 × 60 cm · soufflet 10",500,600,100,250]],
+    bretelle:[["Petit (à vérifier)",300,450,0,0],["Moyen (à vérifier)",350,550,0,0],["Grand (à vérifier)",400,600,0,0]],
+    box:[["Premium Box 25 × 27 cm · soufflet 17",250,270,170,115]]
+  };
+  // Géométrie de la face avant. Unités : mm, origine en bas à gauche du sac, y vers le haut.
+  // Renvoie une liste de primitives (polygones, textes), chacune rangée dans un calque.
+  function geometrieSac(p){
+    var P=[], L=Number(p.L)||250, H=Number(p.H)||350, S=Number(p.S)||0, HA=Number(p.HA)||0, type=p.type||"anse";
+    var BLEU="#1a2a9c", ROUGE="#e10a26", GRIS="#555555", TRAIT="#333333", COUTURE="#8a8a8a";
+    var sac=p.couleurSac||{nom:"Blanc",hex:"#ffffff"}, anses=p.couleurAnses||sac;
+    var CAL={g:"Gabarit sac", z:"Zone d'impression", c:"Cotes", i:"Infos"};
+    var avecAnses=(type==="anse"||type==="box");
+    if(avecAnses && HA<=0) HA = type==="box" ? 115 : 250;
+    function poly(calque, pts, o){ P.push({calque:calque, t:"poly", pts:pts, ferme:o.ferme!==false, fill:o.fill||null, stroke:o.stroke||null, ep:o.ep||0.3, dash:o.dash||null}); }
+    function texte(calque, x, y, s, taille, couleur, ancre, rot){ P.push({calque:calque, t:"texte", x:x, y:y, s:s, taille:taille, couleur:couleur, ancre:ancre||"start", rot:rot||0}); }
+    function ellipse(cx, cy, rx, ry, a0, a1, n){ var pts=[], i, a; for(i=0;i<=n;i++){ a=a0+(a1-a0)*i/n; pts.push([cx+rx*Math.cos(a), cy+ry*Math.sin(a)]); } return pts; }
+    function rect(x1, y1, x2, y2){ return [[x1,y1],[x2,y1],[x2,y2],[x1,y2]]; }
+    function rectArrondi(x, y, w, h, r){
+      return [].concat(ellipse(x+w-r, y+r, r, r, -Math.PI/2, 0, 8), ellipse(x+w-r, y+h-r, r, r, 0, Math.PI/2, 8),
+                       ellipse(x+r, y+h-r, r, r, Math.PI/2, Math.PI, 8), ellipse(x+r, y+r, r, r, Math.PI, 1.5*Math.PI, 8));
+    }
+    function couture(pts, ferme){ poly(CAL.g, pts, {ferme:ferme, stroke:COUTURE, ep:0.25, dash:[2,1.5]}); }
+    function fleche(x, y, dx, dy){ // pointe de flèche en (x,y), orientée selon (dx,dy)
+      var n=Math.sqrt(dx*dx+dy*dy)||1, ux=dx/n, uy=dy/n, l=4, e=1.5;
+      poly(CAL.c, [[x,y],[x-ux*l-uy*e, y-uy*l+ux*e],[x-ux*l+uy*e, y-uy*l-ux*e]], {fill:BLEU});
+    }
+    function cote(x1, y1, x2, y2, libelle, decalage){ // ligne de cote, 2 flèches, texte au milieu
+      poly(CAL.c, [[x1,y1],[x2,y2]], {ferme:false, stroke:BLEU, ep:0.35});
+      fleche(x1, y1, x1-x2, y1-y2); fleche(x2, y2, x2-x1, y2-y1);
+      if(Math.abs(x2-x1)<0.01) texte(CAL.c, x1+decalage, (y1+y2)/2, libelle, 5, BLEU, "middle", 90);
+      else texte(CAL.c, (x1+x2)/2, y1+decalage, libelle, 5, BLEU, "middle", 0);
+    }
+    function rappel(x1, y1, x2, y2){ poly(CAL.c, [[x1,y1],[x2,y2]], {ferme:false, stroke:BLEU, ep:0.2, dash:[1,1]}); }
+    var titre, zone, haut=H, droite=L;
+    // corps du sac
+    if(type==="bretelle"){
+      titre="Sac à bretelles non-tissé";
+      var lb=Math.round(L*0.2), c=Math.round(H*0.3), yc=H-c, r=L/2-lb;
+      poly(CAL.g, [[0,0],[L,0],[L,H],[L-lb,H],[L-lb,yc+r]].concat(ellipse(L/2, yc+r, r, r, 0, -Math.PI, 36), [[lb,yc+r],[lb,H],[0,H]]), {fill:sac.hex, stroke:TRAIT});
+      couture([[0,H-12],[lb,H-12]], false); couture([[L-lb,H-12],[L,H-12]], false);
+      texte(CAL.i, L/2, H-6, "soudure / couture des bretelles", 3.2, GRIS, "middle", 0);
+      rappel(L-lb, yc, L+20, yc); cote(L+16, yc, L+16, H, c+" mm", 6);
+      cote(L-lb, H+10, L, H+10, lb+" mm", 4); haut=H+18;
+      zone=[20, 20, L-20, yc-15];
+    } else {
+      poly(CAL.g, rect(0,0,L,H), {fill:sac.hex, stroke:TRAIT});
+      if(type==="poignee"){
+        titre="Sac à poignée (découpe) non-tissé";
+        var wt=Math.round(Math.min(95, Math.max(60, L*0.36))), ht=Math.round(Math.min(32, Math.max(24, L*0.1))), mh=Math.round(Math.max(18, H*0.06));
+        var xt=(L-wt)/2, yt=H-mh-ht;
+        couture(rectArrondi(xt-12, yt-10, wt+24, ht+20, 10), true); // renfort autour de la découpe
+        poly(CAL.g, rectArrondi(xt, yt, wt, ht, ht/2), {fill:"#ffffff", stroke:TRAIT});
+        texte(CAL.i, L/2, yt+ht/2-1.2, "découpe "+wt+" × "+ht+" mm", 3.2, GRIS, "middle", 0);
+        texte(CAL.i, L/2, yt-15, "renfort", 3, GRIS, "middle", 0);
+        rappel(xt+wt, H-mh, L+20, H-mh); cote(L+16, H-mh, L+16, H, mh+" mm", 6);
+        zone=[20, 25, L-20, yt-22];
+      } else {
+        titre = type==="box" ? "Premium Box (box bag) non-tissé" : "Sac à anses non-tissé";
+        var e=Math.round(Math.min(30, Math.max(22, L*0.08))), xa=Math.round(L*0.25), xb=L-xa, rx=(xb-xa)/2, ourlet=30;
+        // anse : bande de largeur e, en demi-ellipse, couture au milieu
+        poly(CAL.g, ellipse(L/2, H, rx, HA, Math.PI, 0, 48).concat(ellipse(L/2, H, rx-e, HA-e, 0, Math.PI, 48)), {fill:anses.hex, stroke:TRAIT});
+        couture(ellipse(L/2, H, rx-e/2, HA-e/2, Math.PI, 0, 48), false);
+        couture([[0,H-ourlet],[L,H-ourlet]], false); // ourlet du haut
+        couture(rect(xa, H-4, xa+e, H-ourlet+4), true); couture(rect(xb-e, H-4, xb, H-ourlet+4), true); // fixation des anses
+        texte(CAL.i, 3, H-ourlet-5, "ourlet "+ourlet+" mm", 3.2, GRIS, "start", 0);
+        rappel(L/2, H+HA, L+20, H+HA); cote(L+16, H, L+16, H+HA, "anses "+HA+" mm", 6);
+        cote(xb-e, H+HA*0.35, xb, H+HA*0.35, e+" mm", 4);
+        haut=H+HA;
+        zone=[20, 20, L-20, H-ourlet-12];
+      }
+    }
+    // soufflet : pli du fond (sacs à poignée / anses / bretelles), vue de côté pour la Premium Box
+    if(S>0 && type!=="box"){
+      couture([[0,S/2],[L,S/2]], false);
+      texte(CAL.i, 3, S/2+2, "pli du soufflet de fond ("+S+" mm)", 3.2, GRIS, "start", 0);
+    }
+    if(S>0 && type==="box"){
+      var x0=L+45;
+      poly(CAL.g, rect(x0,0,x0+S,H), {fill:sac.hex, stroke:TRAIT});
+      couture([[x0+S/2,H],[x0+S/2,S/2]], false); couture([[x0,0],[x0+S/2,S/2],[x0+S,0]], false);
+      texte(CAL.i, x0+S/2, H+8, "côté (soufflet)", 4, GRIS, "middle", 0);
+      cote(x0, -16, x0+S, -16, S+" mm", -8);
+      droite=x0+S;
+    }
+    // zone d'impression maximale
+    var zl=Math.round(zone[2]-zone[0]), zh=Math.round(zone[3]-zone[1]);
+    if(zl>10 && zh>10){
+      poly(CAL.z, rect(zone[0],zone[1],zone[2],zone[3]), {stroke:ROUGE, ep:0.3, dash:[3,2]});
+      texte(CAL.z, zone[0]+2, zone[3]-5, "Zone d'impression max. "+zl+" × "+zh+" mm", 3.5, ROUGE, "start", 0);
+    }
+    // cotes principales
+    cote(0, -16, L, -16, L+" mm", -8);
+    cote(-16, 0, -16, H, H+" mm", -4);
+    // informations (en haut à gauche, comme sur les BAT EZPAC)
+    var noms=[], k;
+    for(k=0;k<(p.impression||[]).length;k++) noms.push(p.impression[k].nom);
+    var lignes=[titre+" — face avant",
+      "Fond "+String(sac.nom||"").toLowerCase()+(noms.length?" • Impression "+noms.join(" + "):"")+(avecAnses ? " • Anses "+String(anses.nom||"").toLowerCase() : ""),
+      "Dimensions : "+L+" × "+H+" mm"+(S>0?" • soufflet "+S+" mm":"")+(avecAnses?" • anses "+HA+" mm":"")+" • échelle 1:1"];
+    if(p.client) lignes.push("Client : "+p.client);
+    for(k=0;k<lignes.length;k++) texte(CAL.i, 0, haut+20+(lignes.length-1-k)*6.5, lignes[k], k===0?4.6:4, k===0?"#222222":GRIS, "start", 0);
+    P.cadre={x1:-30, y1:-32, x2:droite+30, y2:haut+20+lignes.length*6.5};
+    return P;
+  }
+  // Aperçu SVG (y inversé, 1 unité = 1 mm)
+  function gabaritSVG(P){
+    var c=P.cadre, h=c.y2-c.y1, out=[], i, j, o, d;
+    var x=function(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); };
+    var Y=function(y){ return (c.y2-y).toFixed(2); }, X=function(v){ return (v-c.x1).toFixed(2); };
+    var calques={}, ordre=["Gabarit sac","Zone d'impression","Cotes","Infos"];
+    for(i=0;i<P.length;i++){ o=P[i];
+      if(o.t==="poly"){
+        d=""; for(j=0;j<o.pts.length;j++) d+=(j?"L":"M")+X(o.pts[j][0])+" "+Y(o.pts[j][1]);
+        d='<path d="'+d+(o.ferme?"Z":"")+'" fill="'+(o.fill||"none")+'" stroke="'+(o.stroke||"none")+'" stroke-width="'+o.ep+'"'+(o.dash?' stroke-dasharray="'+o.dash.join(" ")+'"':'')+' stroke-linejoin="round"/>';
+      } else {
+        d='<text x="'+X(o.x)+'" y="'+Y(o.y)+'" font-family="\'Open Sans\', Arial, sans-serif" font-size="'+o.taille+'" fill="'+o.couleur+'" text-anchor="'+o.ancre+'"'+(o.rot?' transform="rotate('+(-o.rot)+' '+X(o.x)+' '+Y(o.y)+')"':'')+'>'+x(o.s)+'</text>';
+      }
+      (calques[o.calque]=calques[o.calque]||[]).push(d);
+    }
+    for(i=0;i<ordre.length;i++) if(calques[ordre[i]]) out.push('<g id="'+ordre[i].replace(/[^A-Za-z]+/g,"_")+'">'+calques[ordre[i]].join("")+'</g>');
+    var w=(c.x2-c.x1).toFixed(1);
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'mm" height="'+h.toFixed(1)+'mm" viewBox="0 0 '+w+' '+h.toFixed(1)+'">\n'+out.join("\n")+'\n</svg>\n';
+  }
+  // Dessin natif dans Illustrator (exécuté uniquement par le script .jsx) : 4 calques nommés, échelle 1:1, centré sur le plan de travail actif
+  function dessinerCalquesIllustrator(P){
+    var doc=app.activeDocument, MM=72/25.4, i, j, o, l;
+    var ordre=["Gabarit sac","Zone d'impression","Cotes","Infos"], calques={}, existants=[];
+    for(i=0;i<ordre.length;i++){ try{ doc.layers.getByName(ordre[i]); existants.push(ordre[i]); }catch(e){} }
+    var remplacer = existants.length ? confirm("Des calques techniques existent déjà ("+existants.join(", ")+").\n\nOui = remplacer leur contenu\nNon = ajouter de nouveaux calques") : false;
+    for(i=0;i<ordre.length;i++){
+      l=null;
+      if(remplacer){ try{ l=doc.layers.getByName(ordre[i]); l.locked=false; l.visible=true; while(l.pageItems.length) l.pageItems[0].remove(); }catch(e){ l=null; } }
+      if(!l){ l=doc.layers.add(); l.name=ordre[i]; }
+      calques[ordre[i]]=l;
+    }
+    calques["Gabarit sac"].zOrder(ZOrderMethod.SENDTOBACK);
+    for(i=1;i<ordre.length;i++) calques[ordre[i]].zOrder(ZOrderMethod.BRINGTOFRONT);
+    var ab=doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect, c=P.cadre;
+    var ox=(ab[0]+ab[2])/2-(c.x1+c.x2)/2*MM, oy=(ab[1]+ab[3])/2-(c.y1+c.y2)/2*MM;
+    var police=null; try{ police=app.textFonts.getByName("OpenSans-Regular"); }catch(e){ police=null; }
+    function couleur(hex){ hex=String(hex).replace("#",""); var k=new RGBColor(); k.red=parseInt(hex.substr(0,2),16); k.green=parseInt(hex.substr(2,2),16); k.blue=parseInt(hex.substr(4,2),16); return k; }
+    for(i=0;i<P.length;i++){ o=P[i]; l=calques[o.calque];
+      if(o.t==="poly"){
+        var pts=[]; for(j=0;j<o.pts.length;j++) pts.push([ox+o.pts[j][0]*MM, oy+o.pts[j][1]*MM]);
+        var it=l.pathItems.add(); it.setEntirePath(pts); it.closed=o.ferme;
+        it.filled=!!o.fill; if(o.fill) it.fillColor=couleur(o.fill);
+        it.stroked=!!o.stroke; if(o.stroke){ it.strokeColor=couleur(o.stroke); it.strokeWidth=o.ep*MM; if(o.dash) it.strokeDashes=[o.dash[0]*MM, o.dash[1]*MM]; }
+      } else {
+        var tf=l.textFrames.pointText([ox+o.x*MM, oy+o.y*MM]); tf.contents=o.s;
+        var ca=tf.textRange.characterAttributes; ca.size=o.taille*MM; ca.fillColor=couleur(o.couleur); if(police) ca.textFont=police;
+        tf.textRange.paragraphAttributes.justification = o.ancre==="middle" ? Justification.CENTER : Justification.LEFT;
+        if(o.rot){ tf.rotate(o.rot); tf.position=[ox+o.x*MM-o.taille*MM*0.35-tf.width/2, oy+o.y*MM+tf.height/2]; }
+      }
+    }
+    for(i=0;i<ordre.length;i++) calques[ordre[i]].locked=true;
+    doc.selection=null;
+    alert("Calques techniques ajoutés (échelle 1:1, verrouillés) :\n- Gabarit sac (sous votre dessin)\n- Zone d'impression\n- Cotes\n- Infos\n\nDéverrouillez ou masquez-les dans le panneau Calques.");
+  }
+
+  // Devine le type et les dimensions à partir du produit / des dimensions du BAT
+  function gabaritDepuisBat(b){
+    var t=((b.produit||"")+" "+(b.titre||"")).toLowerCase(), type="anse";
+    if(/box|premium/.test(t)) type="box"; else if(/bretel/.test(t)) type="bretelle"; else if(/poign|d[ée]coup/.test(t)) type="poignee"; else if(/anse/.test(t)) type="anse";
+    var f=GABARIT_FORMATS[type][0], g={ type:type, L:f[1], H:f[2], S:f[3], HA:f[4] };
+    var d=String(b.dimensions||""), n=d.match(/\d+(?:[.,]\d+)?/g);
+    if(n && n.length>=2){
+      var k=/mm/i.test(d) ? 1 : (Math.max(parseFloat(n[0]),parseFloat(n[1]))<100 ? 10 : 1);
+      g.L=Math.round(parseFloat(n[0].replace(",","."))*k); g.H=Math.round(parseFloat(n[1].replace(",","."))*k);
+      var so=d.match(/souf\w*\D*(\d+(?:[.,]\d+)?)/i); g.S=so ? Math.round(parseFloat(so[1].replace(",","."))*k) : (n.length>=3 && !/anse/i.test(d) ? Math.round(parseFloat(n[2].replace(",","."))*k) : 0);
+    }
+    return g;
+  }
+  function initGabaritBat(b){
+    var cle="ezpac_gabarit_"+b.id, g=null;
+    try{ g=JSON.parse(localStorage.getItem(cle)||"null"); }catch(e){ g=null; }
+    if(!g) g=gabaritDepuisBat(b);
+    var opts=COULEURS_BAT.map(function(c){ return '<option value="'+c[1]+'">'+esc(c[0])+'</option>'; }).join("");
+    $("gabCoulSac").innerHTML=opts; $("gabCoulAnses").innerHTML=opts;
+    $("gabType").value=g.type; $("gabL").value=g.L; $("gabH").value=g.H; $("gabS").value=g.S||0; $("gabHA").value=g.HA||0;
+    $("gabCoulSac").value=g.sac||"#ffffff"; $("gabCoulAnses").value=g.anses||g.sac||"#ffffff";
+    function remplirFormats(){
+      var liste=GABARIT_FORMATS[$("gabType").value]||[];
+      $("gabFormat").innerHTML='<option value="">Personnalisé</option>'+liste.map(function(f,i){ return '<option value="'+i+'">'+esc(f[0])+'</option>'; }).join("");
+      var L=Number($("gabL").value), H=Number($("gabH").value), S=Number($("gabS").value)||0;
+      liste.forEach(function(f,i){ if(f[1]===L && f[2]===H && f[3]===S) $("gabFormat").value=String(i); });
+      var anses=/^(anse|box)$/.test($("gabType").value);
+      $("gabHAChamp").style.display=anses?"":"none"; $("gabCoulAnsesChamp").style.display=anses?"":"none";
+    }
+    function params(){
+      var nomC=function(sel){ return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : ""; };
+      return { type:$("gabType").value, L:Number($("gabL").value)||250, H:Number($("gabH").value)||350, S:Number($("gabS").value)||0, HA:Number($("gabHA").value)||0,
+        couleurSac:{ nom:nomC($("gabCoulSac")), hex:$("gabCoulSac").value }, couleurAnses:{ nom:nomC($("gabCoulAnses")), hex:$("gabCoulAnses").value },
+        impression:(b.couleurs||[]).map(function(c){ return { nom:c.nom }; }), client:b.nomCartouche||b.clientName||"" };
+    }
+    function maj(){
+      var p=params();
+      try{ localStorage.setItem(cle, JSON.stringify({ type:p.type, L:p.L, H:p.H, S:p.S, HA:p.HA, sac:p.couleurSac.hex, anses:p.couleurAnses.hex })); }catch(e){}
+      $("gabApercu").innerHTML=gabaritSVG(geometrieSac(p)).replace(/^<\?xml[^>]*>\s*/,"").replace(/width="[\d.]+mm" height="[\d.]+mm"/,'style="width:100%;max-width:560px;height:auto;"');
+    }
+    $("gabType").addEventListener("change", function(){
+      var f=(GABARIT_FORMATS[$("gabType").value]||[])[0];
+      if(f){ $("gabL").value=f[1]; $("gabH").value=f[2]; $("gabS").value=f[3]; $("gabHA").value=f[4]; }
+      remplirFormats(); maj();
+    });
+    $("gabFormat").addEventListener("change", function(){
+      var f=(GABARIT_FORMATS[$("gabType").value]||[])[$("gabFormat").value];
+      if(f){ $("gabL").value=f[1]; $("gabH").value=f[2]; $("gabS").value=f[3]; $("gabHA").value=f[4]; }
+      maj();
+    });
+    ["gabL","gabH","gabS","gabHA"].forEach(function(id){ $(id).addEventListener("input", function(){ remplirFormats(); maj(); }); });
+    ["gabCoulSac","gabCoulAnses"].forEach(function(id){ $(id).addEventListener("change", maj); });
+    remplirFormats(); maj();
+    var nomGab=function(){ var p=params(); return ("Gabarit_"+p.type+"_"+p.L+"x"+p.H+(p.S?"_S"+p.S:"")+"_"+(b.nomCartouche||b.clientName||"client")).replace(/[^\w\-]+/g,"_"); };
+    $("gabSvg").addEventListener("click", function(){ telechargerTexte(gabaritSVG(geometrieSac(params())), nomGab()+".svg", "image/svg+xml"); });
+    $("gabJsx").addEventListener("click", function(){ telechargerTexte(scriptIllustratorGabarit(params()), nomGab()+".jsx", "application/javascript"); });
+  }
+  // Script Illustrator des calques techniques : embarque le moteur de géométrie et dessine en objets natifs (calques nommés)
+  function scriptIllustratorGabarit(p){
+    var src="// EZPAC - calques techniques du sac. Illustrator : Fichier > Scripts > Autre script... puis choisir ce fichier.\n"
+      +"#target illustrator\n(function(){\n"
+      +"  if(app.documents.length===0){ if(!confirm('Aucun document ouvert.\\nCr\\u00e9er un nouveau document A3 ?')) return; app.documents.add(DocumentColorSpace.CMYK, 841.89, 1190.55); }\n"
+      +"  "+geometrieSac.toString()+"\n"
+      +"  "+dessinerCalquesIllustrator.toString()+"\n"
+      +"  dessinerCalquesIllustrator(geometrieSac("+JSON.stringify(p)+"));\n"
+      +"})();\n";
+    return src.replace(/[\u0080-\uffff]/g, function(ch){ return "\\u"+("000"+ch.charCodeAt(0).toString(16)).slice(-4); });
+  }
   // ----- cartouche (reproduction du modèle EZPAC, coordonnées identiques au fichier Cartouche_BAT) -----
   function cartoucheSVG(b, o){
     var s=invoiceSettings||{};
