@@ -2016,8 +2016,24 @@
     h+='<div id="gabApercu" style="border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;max-height:520px;overflow:auto;text-align:center;"></div>';
     h+='<div class="item-row" style="gap:6px;margin-top:8px;flex-wrap:wrap;">'
       +'<button type="button" class="btn btn-primary btn-sm" id="gabJsx">⬇ Script Illustrator (.jsx)</button>'
-      +'<button type="button" class="btn btn-ghost btn-sm" id="gabSvg">⬇ SVG</button></div>';
+      +'<button type="button" class="btn btn-ghost btn-sm" id="gabSvg">⬇ SVG</button>'
+      +'<button type="button" class="btn btn-gold btn-sm" data-bat-complet="1">📦 Cartouche + calques techniques (.jsx)</button></div>';
     h+='<div class="hint" style="margin-top:6px;margin-bottom:14px;line-height:1.5;">Dans Illustrator : <b>Fichier → Scripts → Autre script…</b> → le fichier .jsx. Le script crée 4 calques verrouillés à l\'échelle 1:1, centrés sur le plan de travail : <b>Gabarit sac</b> (sous le dessin), <b>Zone d\'impression</b>, <b>Cotes</b> et <b>Infos</b>. Les couleurs d\'impression sont celles du BAT.</div>';
+    // mockup
+    var images=[];
+    (b.versions||[]).slice().reverse().forEach(function(v){ (v.fichiers||[]).forEach(function(f){ if(/\.(png|jpe?g|svg|webp)$/i.test(f.name||"")) images.push({ url:f.url, nom:nomVersion(v)+" — "+f.name }); }); });
+    (b.originaux||[]).forEach(function(f){ if(/\.(png|jpe?g|svg|webp)$/i.test(f.name||"")) images.push({ url:f.url, nom:"Original — "+f.name }); });
+    h+='<div class="section-head"><h3>🖼️ Mockup du sac</h3></div>';
+    h+='<div class="hint" style="margin-bottom:8px;">Image réaliste du sac choisi ci-dessus (modèle, dimensions, couleurs), avec le visuel du client dans la zone d\'impression.</div>';
+    h+='<div class="field-row"><div class="field"><label>Visuel</label><select id="mkSource"><option value="">— aucun —</option>'+images.map(function(im,i){ return '<option value="'+i+'">'+esc(im.nom)+'</option>'; }).join("")+'<option value="local">📂 Choisir un fichier sur l\'ordinateur…</option></select></div>'
+      +'<div class="field"><label>Taille du visuel : <span id="mkTailleVal">80</span> %</label><input id="mkTaille" type="range" min="20" max="100" value="80"></div>'
+      +'<div class="field"><label>Position verticale</label><input id="mkPos" type="range" min="0" max="100" value="45"></div></div>';
+    h+='<input type="file" id="mkFichier" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;">';
+    h+='<div class="item-row" style="gap:14px;flex-wrap:wrap;margin-bottom:8px;"><label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="mkTeinte"> Teinter le visuel avec la couleur d\'impression (1 couleur)</label>'
+      +'<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="mkLegende" checked> Légende (modèle, dimensions, couleurs)</label></div>';
+    h+='<div id="mkApercu" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;text-align:center;"></div>';
+    h+='<div class="item-row" style="gap:6px;margin:8px 0 14px;flex-wrap:wrap;"><button type="button" class="btn btn-primary btn-sm" id="mkPng">⬇ Mockup (image JPG)</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="mkJoindre" data-mut="1">📎 Joindre le mockup au dernier BAT</button></div>';
     // cartouche
     var dernier=lesBats[lesBats.length-1];
     h+='<div class="section-head" id="batCartoucheTitre"><h3>🏷️ Cartouche pour Illustrator</h3></div>';
@@ -2026,6 +2042,7 @@
     h+='<div class="field"><label>Commentaire imprimé dans la cartouche <span class="hint">(facultatif, sinon lignes vides pour le client)</span></label><textarea id="batCartComm" rows="2"></textarea></div>';
     h+='<div id="batCartApercu" style="border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;overflow:auto;"></div>';
     h+='<div class="item-row" style="gap:6px;margin-top:8px;flex-wrap:wrap;">'
+      +'<button type="button" class="btn btn-gold btn-sm" data-bat-complet="1">📦 Cartouche + calques techniques (.jsx)</button>'
       +'<button type="button" class="btn btn-primary btn-sm" id="batCartJsx">⬇ Script Illustrator (.jsx)</button>'
       +'<button type="button" class="btn btn-ghost btn-sm" id="batCartCopier">📋 Copier (coller dans Illustrator)</button>'
       +'<button type="button" class="btn btn-ghost btn-sm" id="batCartSvg">⬇ SVG</button></div>';
@@ -2099,7 +2116,8 @@
         majApercuCartouche(); $("batCartoucheTitre").scrollIntoView({behavior:"smooth"});
       });
     });
-    initGabaritBat(b, function(){ try{ majApercuCartouche(); }catch(e){} });
+    initGabaritBat(b, function(){ try{ majApercuCartouche(); }catch(e){} try{ majMockup(); }catch(e){} });
+    var majMockup=initMockupBat(b, images);
     var optsCart=function(){ return { numero:$("batCartNum").value||"1", date:$("batCartDate").value, commentaire:$("batCartComm").value.trim(),
       produit:gabaritCourant ? texteProduitGabarit(gabaritCourant) : (b.produit||""), dimensions:gabaritCourant ? dimensionsGabarit(gabaritCourant) : "" }; };
     function majApercuCartouche(){ $("batCartApercu").innerHTML=cartoucheSVG(b, optsCart()).replace(/^<\?xml[^>]*>\s*/,"").replace('width="308mm" height="78.8mm"','width="100%" style="max-width:900px;display:block;"'); }
@@ -2107,6 +2125,13 @@
     majApercuCartouche();
     var nomCart=function(){ return ("Cartouche_BAT_"+(b.nomCartouche||b.clientName||"client")+"_n"+($("batCartNum").value||"1")).replace(/[^\w\-]+/g,"_"); };
     $("batCartSvg").addEventListener("click", function(){ telechargerTexte(cartoucheSVG(b, optsCart()), nomCart()+".svg", "image/svg+xml"); });
+    Array.prototype.forEach.call(col.querySelectorAll("[data-bat-complet]"), function(btn){
+      btn.addEventListener("click", function(){
+        if(!gabaritCourant){ toast("Réglez d'abord les calques techniques"); return; }
+        var nom=("BAT_"+(b.nomCartouche||b.clientName||"client")+"_n"+($("batCartNum").value||"1")+"_cartouche_et_calques").replace(/[^\w\-]+/g,"_");
+        telechargerTexte(scriptIllustratorBatComplet(gabaritCourant, cartoucheSVG(b, optsCart()), nom), nom+".jsx", "application/javascript");
+      });
+    });
     $("batCartJsx").addEventListener("click", function(){ telechargerTexte(scriptIllustratorCartouche(cartoucheSVG(b, optsCart()), nomCart()), nomCart()+".jsx", "application/javascript"); });
     $("batCartCopier").addEventListener("click", function(){
       var svg=cartoucheSVG(b, optsCart());
@@ -2166,7 +2191,7 @@
     var CAL={g:"Gabarit sac", z:"Zone d'impression", c:"Cotes", i:"Infos"};
     var avecAnses=(type==="anse"||type==="box");
     if(avecAnses && HA<=0) HA = type==="box" ? 115 : 250;
-    function poly(calque, pts, o){ P.push({calque:calque, t:"poly", pts:pts, ferme:o.ferme!==false, fill:o.fill||null, stroke:o.stroke||null, ep:o.ep||0.3, dash:o.dash||null}); }
+    function poly(calque, pts, o){ P.push({calque:calque, t:"poly", pts:pts, ferme:o.ferme!==false, fill:o.fill||null, stroke:o.stroke||null, ep:o.ep||0.3, dash:o.dash||null, trou:!!o.trou}); }
     function texte(calque, x, y, s, taille, couleur, ancre, rot){ P.push({calque:calque, t:"texte", x:x, y:y, s:s, taille:taille, couleur:couleur, ancre:ancre||"start", rot:rot||0}); }
     function ellipse(cx, cy, rx, ry, a0, a1, n){ var pts=[], i, a; for(i=0;i<=n;i++){ a=a0+(a1-a0)*i/n; pts.push([cx+rx*Math.cos(a), cy+ry*Math.sin(a)]); } return pts; }
     function rect(x1, y1, x2, y2){ return [[x1,y1],[x2,y1],[x2,y2],[x1,y2]]; }
@@ -2204,7 +2229,7 @@
         var wt=Math.round(Math.min(95, Math.max(60, L*0.36))), ht=Math.round(Math.min(32, Math.max(24, L*0.1))), mh=Math.round(Math.max(18, H*0.06));
         var xt=(L-wt)/2, yt=H-mh-ht;
         couture(rectArrondi(xt-12, yt-10, wt+24, ht+20, 10), true); // renfort autour de la découpe
-        poly(CAL.g, rectArrondi(xt, yt, wt, ht, ht/2), {fill:"#ffffff", stroke:TRAIT});
+        poly(CAL.g, rectArrondi(xt, yt, wt, ht, ht/2), {fill:"#ffffff", stroke:TRAIT, trou:true});
         texte(CAL.i, L/2, yt+ht/2-1.2, "découpe "+wt+" × "+ht+" mm", 3.2, GRIS, "middle", 0);
         texte(CAL.i, L/2, yt-15, "renfort", 3, GRIS, "middle", 0);
         rappel(xt+wt, H-mh, L+20, H-mh); cote(L+16, H-mh, L+16, H, mh+" mm", 6);
@@ -2279,7 +2304,7 @@
     return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'mm" height="'+h.toFixed(1)+'mm" viewBox="0 0 '+w+' '+h.toFixed(1)+'">\n'+out.join("\n")+'\n</svg>\n';
   }
   // Dessin natif dans Illustrator (exécuté uniquement par le script .jsx) : 4 calques nommés, échelle 1:1, centré sur le plan de travail actif
-  function dessinerCalquesIllustrator(P){
+  function dessinerCalquesIllustrator(P, zone, silencieux){
     var doc=app.activeDocument, MM=72/25.4, i, j, o, l;
     var ordre=["Gabarit sac","Zone d'impression","Cotes","Infos"], calques={}, existants=[];
     for(i=0;i<ordre.length;i++){ try{ doc.layers.getByName(ordre[i]); existants.push(ordre[i]); }catch(e){} }
@@ -2292,7 +2317,7 @@
     }
     calques["Gabarit sac"].zOrder(ZOrderMethod.SENDTOBACK);
     for(i=1;i<ordre.length;i++) calques[ordre[i]].zOrder(ZOrderMethod.BRINGTOFRONT);
-    var ab=doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect, c=P.cadre;
+    var ab=zone||doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect, c=P.cadre;
     var ox=(ab[0]+ab[2])/2-(c.x1+c.x2)/2*MM, oy=(ab[1]+ab[3])/2-(c.y1+c.y2)/2*MM;
     var police=null; try{ police=app.textFonts.getByName("OpenSans-Regular"); }catch(e){ police=null; }
     function couleur(hex){ hex=String(hex).replace("#",""); var k=new RGBColor(); k.red=parseInt(hex.substr(0,2),16); k.green=parseInt(hex.substr(2,2),16); k.blue=parseInt(hex.substr(4,2),16); return k; }
@@ -2311,7 +2336,13 @@
     }
     for(i=0;i<ordre.length;i++) calques[ordre[i]].locked=true;
     doc.selection=null;
-    alert("Calques techniques ajoutés (échelle 1:1, verrouillés) :\n- Gabarit sac (sous votre dessin)\n- Zone d'impression\n- Cotes\n- Infos\n\nDéverrouillez ou masquez-les dans le panneau Calques.");
+    var encombre=[ox+c.x1*MM, oy+c.y2*MM, ox+c.x2*MM, oy+c.y1*MM];
+    if(!silencieux){ // plan de travail = ancien plan + calques techniques (marge 10 mm)
+      var ia=doc.artboards.getActiveArtboardIndex(), r=doc.artboards[ia].artboardRect, m=10*MM;
+      doc.artboards[ia].artboardRect=[Math.min(r[0], encombre[0]-m), Math.max(r[1], encombre[1]+m), Math.max(r[2], encombre[2]+m), Math.min(r[3], encombre[3]-m)];
+    }
+    if(!silencieux) alert("Calques techniques ajoutés (échelle 1:1, verrouillés) :\n- Gabarit sac (sous votre dessin)\n- Zone d'impression\n- Cotes\n- Infos\n\nDéverrouillez ou masquez-les dans le panneau Calques.\nLe plan de travail a été agrandi pour les inclure.");
+    return encombre;
   }
 
   // Devine le type et les dimensions à partir du produit / des dimensions du BAT
@@ -2382,6 +2413,144 @@
       +"})();\n";
     return src.replace(/[\u0080-\uffff]/g, function(ch){ return "\\u"+("000"+ch.charCodeAt(0).toString(16)).slice(-4); });
   }
+  // ----- Mockup : rendu « photo » du sac à partir de la même géométrie -----
+  function lireCommeDataUri(blob){ return new Promise(function(ok, ko){ var r=new FileReader(); r.onload=function(){ ok(r.result); }; r.onerror=ko; r.readAsDataURL(blob); }); }
+  function tailleImage(src){ return new Promise(function(ok){ var im=new Image(); im.onload=function(){ ok({ w:im.naturalWidth||1000, h:im.naturalHeight||1000 }); }; im.onerror=function(){ ok({ w:1000, h:1000 }); }; im.src=src; }); }
+  function assombrir(hex, k){ var n=parseInt(String(hex).replace("#",""),16), f=function(v){ return Math.max(0,Math.min(255,Math.round(v*k))); };
+    return "#"+((1<<24)+(f(n>>16&255)<<16)+(f(n>>8&255)<<8)+f(n&255)).toString(16).slice(1); }
+  function mockupSVG(p, o){
+    var P=geometrieSac(p), c=P.cadre, i, j, q, d, fond="#efece7";
+    var X=function(v){ return (v-c.x1).toFixed(2); }, Y=function(v){ return (c.y2-v).toFixed(2); };
+    var chemin=function(pts, ferme){ var t=""; for(var k=0;k<pts.length;k++) t+=(k?"L":"M")+X(pts[k][0])+" "+Y(pts[k][1]); return t+(ferme?"Z":""); };
+    var w=c.x2-c.x1, hTot=c.y2-c.y1, legende=o.legende ? 22 : 0, H=hTot+legende;
+    var sac=(p.couleurSac||{}).hex||"#ffffff";
+    var out='<defs>'
+      +'<linearGradient id="mkFond" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7f5f2"/><stop offset="1" stop-color="#e2ddd6"/></linearGradient>'
+      +'<linearGradient id="mkLum" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient>'
+      +'<linearGradient id="mkPli" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".10"/><stop offset=".06" stop-color="#000" stop-opacity="0"/><stop offset=".94" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".12"/></linearGradient>'
+      +'<filter id="mkTissu" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="2" seed="3"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 .10"/></feComponentTransfer><feComposite in2="SourceGraphic" operator="in"/></filter>'
+      +'<filter id="mkOmbre" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>'
+      +(o.teinte ? '<filter id="mkfTeinte"><feFlood flood-color="'+o.teinte+'"/><feComposite in2="SourceAlpha" operator="in"/></filter>' : '')
+      +'<filter id="mkEncre"><feComponentTransfer><feFuncA type="linear" slope=".93"/></feComponentTransfer></filter>'
+      +'</defs>';
+    out+='<rect x="0" y="0" width="'+w.toFixed(1)+'" height="'+H.toFixed(1)+'" fill="url(#mkFond)"/>';
+    out+='<ellipse cx="'+X((c.x1+c.x2)/2)+'" cy="'+Y(-4)+'" rx="'+(w*0.42).toFixed(1)+'" ry="9" fill="#000" opacity=".22" filter="url(#mkOmbre)"/>';
+    // pièces du sac (calque « Gabarit sac ») : tissu + lumière + texture ; coutures discrètes
+    var corps=null, zone=null;
+    for(i=0;i<P.length;i++){ q=P[i];
+      if(q.calque==="Zone d'impression" && q.t==="poly") zone=q.pts;
+      if(q.calque!=="Gabarit sac" || q.t!=="poly") continue;
+      d=chemin(q.pts, q.ferme);
+      if(q.fill){
+        var trou=!!q.trou;
+        var teinteP = trou ? fond : q.fill;
+        out+='<path d="'+d+'" fill="'+teinteP+'" stroke="'+assombrir(teinteP, .82)+'" stroke-width=".6" stroke-linejoin="round"/>';
+        if(!trou){ out+='<path d="'+d+'" fill="url(#mkLum)"/><path d="'+d+'" fill="url(#mkPli)"/><path d="'+d+'" fill="#888" filter="url(#mkTissu)"/>'; }
+        else out+='<path d="'+d+'" fill="none" stroke="#000" stroke-opacity=".18" stroke-width="1.6"/>';
+        if(!corps) corps=q;
+      } else if(q.dash){
+        out+='<path d="'+d+'" fill="none" stroke="'+assombrir(sac, .62)+'" stroke-opacity=".55" stroke-width=".45" stroke-dasharray="1.6 1.2"/>';
+      }
+    }
+    // visuel du client dans la zone d'impression
+    if(o.image && zone){
+      var zx1=zone[0][0], zy1=zone[0][1], zx2=zone[2][0], zy2=zone[2][1], zl=zx2-zx1, zh=zy2-zy1, k=(o.taille||80)/100;
+      var r=o.ratio||1, iw=zl*k, ih=iw/r; if(ih>zh*k){ ih=zh*k; iw=ih*r; }
+      var ix=zx1+(zl-iw)/2, iy=zy2-ih-(zh-ih)*((o.position==null?45:o.position)/100);
+      out+='<g filter="url(#mkEncre)"><image href="'+o.image+'" xlink:href="'+o.image+'" x="'+X(ix)+'" y="'+Y(iy+ih)+'" width="'+iw.toFixed(2)+'" height="'+ih.toFixed(2)+'" preserveAspectRatio="xMidYMid meet"'+(o.teinte?' filter="url(#mkfTeinte)"':'')+'/></g>';
+    }
+    if(o.legende){
+      var t1=texteProduitGabarit(p), t2=dimensionsGabarit(p)+(p.client?" — "+p.client:"");
+      var esc2=function(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;"); };
+      out+='<text x="'+(w/2).toFixed(1)+'" y="'+(hTot+8).toFixed(1)+'" text-anchor="middle" font-family="\'Open Sans\', Arial, sans-serif" font-size="'+Math.min(5.5, w/t1.length*1.7).toFixed(2)+'" font-weight="600" fill="#333">'+esc2(t1)+'</text>';
+      out+='<text x="'+(w/2).toFixed(1)+'" y="'+(hTot+15.5).toFixed(1)+'" text-anchor="middle" font-family="\'Open Sans\', Arial, sans-serif" font-size="4.4" fill="#666">'+esc2(t2)+' • EZPAC — ezpac.ma</text>';
+    }
+    return { svg:'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 '+w.toFixed(1)+' '+H.toFixed(1)+'" width="'+w.toFixed(1)+'mm" height="'+H.toFixed(1)+'mm">'+out+'</svg>', w:w, h:H };
+  }
+  function mockupPNG(m, largeurPx){
+    return new Promise(function(ok, ko){
+      var im=new Image(), url=URL.createObjectURL(new Blob([m.svg], {type:"image/svg+xml"}));
+      im.onload=function(){ var cv=document.createElement("canvas"); cv.width=largeurPx; cv.height=Math.round(largeurPx*m.h/m.w);
+        var cx=cv.getContext("2d"); cx.drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url); cv.toBlob(function(bl){ bl ? ok(bl) : ko(new Error("JPG")); }, "image/jpeg", 0.9); };
+      im.onerror=function(){ URL.revokeObjectURL(url); ko(new Error("Rendu impossible")); };
+      im.src=url;
+    });
+  }
+  function initMockupBat(b, images){
+    var etat={ image:null, ratio:1 }, numero=0;
+    async function chargerVisuel(){
+      var v=$("mkSource").value, n=++numero; etat.image=null;
+      if(v==="local"){ $("mkFichier").click(); return; }
+      if(v!==""){
+        try{ var rep=await fetch(images[Number(v)].url); var du=await lireCommeDataUri(await rep.blob()); var t=await tailleImage(du);
+          if(n!==numero) return; etat.image=du; etat.ratio=t.w/t.h; }
+        catch(e){ toast("Visuel illisible (vérifiez le fichier) : "+e.message); }
+      }
+      maj();
+    }
+    $("mkFichier").addEventListener("change", async function(){
+      var f=this.files[0]; if(!f) return;
+      var du=await lireCommeDataUri(f), t=await tailleImage(du); etat.image=du; etat.ratio=t.w/t.h; maj();
+    });
+    function opts(){ var c0=(b.couleurs||[])[0];
+      return { image:etat.image, ratio:etat.ratio, taille:Number($("mkTaille").value), position:Number($("mkPos").value), teinte:$("mkTeinte").checked && c0 ? c0.hex : null, legende:$("mkLegende").checked }; }
+    function maj(){
+      if(!gabaritCourant || !$("mkApercu")) return;
+      $("mkTailleVal").textContent=$("mkTaille").value;
+      $("mkApercu").innerHTML=mockupSVG(gabaritCourant, opts()).svg.replace(/width="[\d.]+mm" height="[\d.]+mm"/,'style="width:100%;max-width:520px;height:auto;display:block;margin:auto;"');
+    }
+    $("mkSource").addEventListener("change", chargerVisuel);
+    ["mkTaille","mkPos"].forEach(function(id){ $(id).addEventListener("input", maj); });
+    ["mkTeinte","mkLegende"].forEach(function(id){ $(id).addEventListener("change", maj); });
+    var nomMk=function(){ return ("Mockup_"+(b.nomCartouche||b.clientName||"client")+"_"+gabaritCourant.type+"_"+gabaritCourant.L+"x"+gabaritCourant.H).replace(/[^\w\-]+/g,"_"); };
+    $("mkPng").addEventListener("click", function(){
+      mockupPNG(mockupSVG(gabaritCourant, opts()), 2000).then(function(bl){
+        var a=document.createElement("a"); a.href=URL.createObjectURL(bl); a.download=nomMk()+".jpg"; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      }).catch(function(e){ toast("Échec du mockup : "+e.message); });
+    });
+    $("mkJoindre").addEventListener("click", async function(){
+      var lesBats=batsDeVersion(b), dernier=lesBats[lesBats.length-1];
+      if(!dernier){ toast("Ajoutez d'abord un BAT (+ Nouveau BAT)"); return; }
+      var btn=this; btn.disabled=true;
+      try{
+        var bl=await mockupPNG(mockupSVG(gabaritCourant, opts()), 2000), fichier=new File([bl], nomMk()+".jpg", {type:"image/jpeg"});
+        var res=await envoyerFichiersBat([fichier], btn);
+        if(res) majVersionBat(b, dernier.id, function(v){ v.fichiers=(v.fichiers||[]).concat(res); }, "Mockup joint au BAT n°"+dernier.n);
+      }catch(e){ toast("Échec : "+e.message); }
+      btn.disabled=false;
+    });
+    maj();
+    return maj;
+  }
+  // Script combiné : cartouche en bas du plan de travail (calque « Cartouche »), calques techniques centrés au-dessus
+  function scriptIllustratorBatComplet(p, svg, nom){
+    var src="// EZPAC - cartouche BAT + calques techniques du sac. Illustrator : Fichier > Scripts > Autre script... puis choisir ce fichier.\n"
+      +"#target illustrator\n(function(){\n"
+      +"  if(app.documents.length===0){ if(!confirm('Aucun document ouvert.\\nCr\\u00e9er un nouveau document A3 ?')) return; app.documents.add(DocumentColorSpace.CMYK, 841.89, 1190.55); }\n"
+      +"  var doc=app.activeDocument;\n"
+      +"  "+geometrieSac.toString()+"\n"
+      +"  "+dessinerCalquesIllustrator.toString()+"\n"
+      +"  // 1) cartouche sur son propre calque\n"
+      +"  var lc=doc.layers.add(); lc.name='Cartouche'; doc.activeLayer=lc;\n"
+      +"  var svg="+JSON.stringify(svg)+";\n"
+      +"  var f=new File(Folder.temp+'/"+nom+".svg'); f.encoding='UTF-8'; f.open('w'); f.write(svg); f.close();\n"
+      +"  var g=doc.groupItems.createFromFile(f); g.move(lc, ElementPlacement.PLACEATBEGINNING);\n"
+      +"  g.name='Cartouche BAT';\n"
+      +"  // 2) calques techniques centr\\u00e9s sur le plan de travail (le dessin), cartouche 1:1 juste en dessous\n"
+      +"  var ia=doc.artboards.getActiveArtboardIndex(), ab=doc.artboards[ia].artboardRect, m=10*72/25.4;\n"
+      +"  var bg=dessinerCalquesIllustrator(geometrieSac("+JSON.stringify(p)+"), null, true);\n"
+      +"  g.position=[(bg[0]+bg[2])/2-g.width/2, Math.min(bg[3], ab[3])-m];\n"
+      +"  var vb=g.visibleBounds;\n"
+      +"  // 3) plan de travail agrandi : dessin + calques + cartouche, marge 10 mm\n"
+      +"  doc.artboards[ia].artboardRect=[Math.min(ab[0], bg[0]-m, vb[0]-m), Math.max(ab[1], bg[1]+m), Math.max(ab[2], bg[2]+m, vb[2]+m), vb[3]-m];\n"
+      +"  lc.zOrder(ZOrderMethod.BRINGTOFRONT);\n"
+      +"  if(confirm('Cartouche et calques techniques ajout\\u00e9s, plan de travail ajust\\u00e9.\\n\\nVectoriser les textes de la cartouche (contours) ?')){\n"
+      +"    var vect=function(gr){ for(var i=gr.textFrames.length-1;i>=0;i--){ gr.textFrames[i].createOutline(); } for(var j=0;j<gr.groupItems.length;j++){ vect(gr.groupItems[j]); } };\n"
+      +"    vect(g);\n  }\n"
+      +"  doc.selection=null;\n"
+      +"})();\n";
+    return src.replace(/[\u0080-\uffff]/g, function(ch){ return "\\u"+("000"+ch.charCodeAt(0).toString(16)).slice(-4); });
+  }
   // ----- cartouche (reproduction du modèle EZPAC, coordonnées identiques au fichier Cartouche_BAT) -----
   function cartoucheSVG(b, o){
     var s=invoiceSettings||{};
@@ -2442,11 +2611,12 @@
       +"  var svg="+JSON.stringify(svg)+";\n"
       +"  var f=new File(Folder.temp+'/"+nom+".svg'); f.encoding='UTF-8'; f.open('w'); f.write(svg); f.close();\n"
       +"  var g=doc.groupItems.createFromFile(f);\n"
-      +"  var ab=doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect, larg=ab[2]-ab[0], marge=Math.max(10, larg*0.04);\n"
-      +"  if(g.width>larg-2*marge){ var k=(larg-2*marge)/g.width*100; g.resize(k,k); }\n"
-      +"  g.position=[ab[0]+(larg-g.width)/2, ab[3]+marge+g.height];\n"
+      +"  var ia=doc.artboards.getActiveArtboardIndex(), ab=doc.artboards[ia].artboardRect, m=10*72/25.4;\n"
+      +"  g.position=[(ab[0]+ab[2])/2-g.width/2, ab[3]-m];\n"
+      +"  var vb=g.visibleBounds;\n"
+      +"  doc.artboards[ia].artboardRect=[Math.min(ab[0], vb[0]-m), ab[1], Math.max(ab[2], vb[2]+m), vb[3]-m];\n"
       +"  g.name='Cartouche BAT';\n"
-      +"  if(confirm('Cartouche ajoutée en bas du plan de travail.\\n\\nVectoriser les textes (contours) ?\\n(Oui = comme la version COURBES, pas besoin des polices à l\\'impression)')){\n"
+      +"  if(confirm('Cartouche ajoutée sous le dessin, plan de travail agrandi.\\n\\nVectoriser les textes (contours) ?\\n(Oui = comme la version COURBES, pas besoin des polices à l\\'impression)')){\n"
       +"    var vect=function(gr){ for(var i=gr.textFrames.length-1;i>=0;i--){ gr.textFrames[i].createOutline(); } for(var j=0;j<gr.groupItems.length;j++){ vect(gr.groupItems[j]); } };\n"
       +"    vect(g);\n  }\n"
       +"  doc.selection=null; g.selected=true;\n"
