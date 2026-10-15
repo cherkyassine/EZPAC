@@ -2560,6 +2560,7 @@
       for(j=0;j<q.pts.length;j++){ if(j) cx.lineTo(X(q.pts[j][0]), Y(q.pts[j][1])); else cx.moveTo(X(q.pts[j][0]), Y(q.pts[j][1])); }
       if(q.ferme) cx.closePath(); cx.stroke();
     }
+    if(p.type!=="box"){ cx.setLineDash([2.2*k, 1.6*k]); cx.beginPath(); cx.moveTo(X(5), 0); cx.lineTo(X(5), cv.height); cx.moveTo(X(L-5), 0); cx.lineTo(X(L-5), cv.height); cx.stroke(); }
     cx.setLineDash([]); cx.globalAlpha=1;
     [[0, 0, cv.width*0.12, 0], [cv.width, 0, cv.width*0.88, 0], [0, cv.height, 0, cv.height*0.9]].forEach(function(g){
       var d=cx.createLinearGradient(g[0], g[1], g[2], g[3]); d.addColorStop(0, "rgba(0,0,0,.14)"); d.addColorStop(1, "rgba(0,0,0,0)"); cx.fillStyle=d; cx.fillRect(0, 0, cv.width, cv.height); });
@@ -2688,9 +2689,7 @@
     function demiBase(x, y){
       if(!(p.S>0)) return 1.5;                                   // sac plat : faces cousues sur les côtés
       if(soufLat) return p.S/2;                                  // Premium Box, bretelles : soufflets latéraux
-      var S2=p.S/2, tri=Math.max(0, 1-y/S2);                     // soufflet de fond : triangles aux coins du bas
-      var g=Math.pow(Math.max(0, 1-y/(H*0.7)), 1.4), cx=Math.pow(Math.max(0, Math.sin(Math.PI*x/L)), 0.4);
-      return S2*Math.max(tri, g*cx);                             // ouvert au fond, se referme en montant
+      return (p.S/2)*Math.pow(Math.max(0, 1-y/H), 0.9);         // soufflet de fond : profondeur S au fond, se referme régulièrement jusqu'en haut
     }
     function tension(x, y){
       var z=0, k, dx, dy, r, th, portee=H*0.55;
@@ -2720,10 +2719,10 @@
     var ds=maillage(gDos, tissu(Object.assign({ map:tDos, side:T.FrontSide }, communs))); ds.customDepthMaterial=profondeur;
     maillage(gDos, matInt(communs), false);
     // côtés : soufflet latéral (pli rentrant en haut, sauf Premium Box rigide) / triangles du soufflet de fond / couture
-    var hCote = soufFond ? p.S/2 : H;
+    var hCote = H;
     var tReliefCote=tex(relief(Math.max(3, D), hCote, K));
     [[0, -1], [L, 1]].forEach(function(c){
-      var g=new T.PlaneGeometry(2, hCote, 10, soufFond ? 12 : 40), pos=g.attributes.position, k, sv, y, t, zh, rentre, gonfle;
+      var g=new T.PlaneGeometry(2, hCote, 10, 40), pos=g.attributes.position, k, sv, y, t, zh, rentre, gonfle;
       for(k=0;k<pos.count;k++){ sv=pos.getX(k); y=pos.getY(k)+hCote/2; t=1-Math.abs(sv); zh=demi(c[0], y);
         rentre = soufLat && p.type!=="box" ? zh*0.64*t*Math.max(0, (y-H*0.45)/(H*0.55)) : 0;
         gonfle = soufLat && p.type!=="box" ? A*0.2*t*Math.sin(Math.PI*y/H) : 0;
@@ -2731,6 +2730,15 @@
       g.computeVertexNormals();
       maillage(g, tissu({ color:couleurSac, bumpMap:tReliefCote, side:T.FrontSide })); maillage(g, matInt(), false);
     });
+    // coutures latérales : petit rebord de tissu qui dépasse (comme sur les sacs cousus)
+    if(p.type!=="box"){
+      var mRebord=tissu({ color:couleurSac, bumpMap:tReliefCote, side:T.DoubleSide });
+      [[0, -1], [L, 1]].forEach(function(c){ [1, -1].forEach(function(sz){
+        var g=new T.PlaneGeometry(1, H, 1, 40), pos=g.attributes.position, k, u, y;
+        for(k=0;k<pos.count;k++){ u=pos.getX(k)+0.5; y=pos.getY(k)+H/2; pos.setXYZ(k, c[0]+c[1]*u*6, y, sz*(demi(c[0], y)+u*0.8)); }
+        g.computeVertexNormals(); maillage(g, mRebord);
+      }); });
+    }
     // fond : suit le bombé des faces
     (function(){
       var g=new T.PlaneGeometry(L, D, Math.max(30, Math.round(L/4)), 4), pos=g.attributes.position, k, x, t;
