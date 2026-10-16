@@ -2764,7 +2764,8 @@
     function bombe(x, y){
       var u=x/L, v=y/H, sx=Math.pow(Math.max(0, Math.sin(Math.PI*u)), 0.7), sy=Math.pow(Math.max(0, Math.sin(Math.PI*(0.06+0.88*v))), 0.6);
       var pli=Math.sin(x*0.035+y*0.018+ph)*0.55+Math.sin(x*0.016-y*0.045+ph*1.7)*0.65+Math.sin(x*0.06+y*0.05+ph*0.6)*0.12;
-      return A*sx*sy + sx*pli*Math.min(2.2, A*0.1+0.6) + sx*tension(x, y);
+      var fermeB = p.type==="bretelle" && y>ycBret ? Math.max(0, 1-(y-ycBret)/(H-18-ycBret)) : 1; // bretelles : couches jointes jusqu'à la soudure
+      return (A*sx*sy + sx*pli*Math.min(2.2, A*0.1+0.6) + sx*tension(x, y))*fermeB;
     }
     function panneau(signe){ // +1 : face avant (normale +z), -1 : dos (miroir en x, normale -z)
       var g=new T.PlaneGeometry(L, H, Math.max(30, Math.round(L/4)), Math.max(36, Math.round(H/4))), pos=g.attributes.position, k, x, y;
@@ -2792,7 +2793,10 @@
     var tReliefCote=tex(relief(Math.max(3, D), hCote, K));
     (soufFond ? [] : [[0, -1], [L, 1]]).forEach(function(c){
       var g=new T.PlaneGeometry(2, hCote, 10, 40), pos=g.attributes.position, k, sv, y, t, zh, rentre, gonfle;
-      for(k=0;k<pos.count;k++){ sv=pos.getX(k); y=pos.getY(k)+hCote/2; t=1-Math.abs(sv); zh=demi(c[0], y);
+      var creux = p.type==="bretelle" && p.S>0 ? Math.min(40, p.S*0.35) : 0; // haut du soufflet en arc : passage de la main arrondi
+      for(k=0;k<pos.count;k++){ sv=pos.getX(k); y=pos.getY(k)+hCote/2; t=1-Math.abs(sv);
+        if(creux) y=y*(hCote-creux*Math.sqrt(Math.max(0, 1-sv*sv)))/hCote;
+        zh=demi(c[0], y);
         rentre = soufLat && p.type!=="box" ? zh*0.25*t*Math.min(1, Math.max(0, (y-hCote*0.5)/(hCote*0.5))) : 0;
         gonfle = soufLat && p.type!=="box" ? A*0.2*t*Math.sin(Math.PI*y/H) : 0;
         pos.setXYZ(k, c[0]+c[1]*(gonfle-rentre), y, (c[1]>0 ? -sv : sv)*zh); }
