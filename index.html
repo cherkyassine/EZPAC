@@ -2783,7 +2783,8 @@
     var ds=maillage(gDos, tissu(Object.assign({ map:tDos, side:T.FrontSide }, communs))); ds.customDepthMaterial=profondeur;
     maillage(gDos, matInt(communs), false);
     // côtés : soufflet latéral (pli rentrant en haut, sauf Premium Box rigide) / triangles du soufflet de fond / couture
-    var hCote = p.type==="bretelle" && p.S>0 ? ycBret : H;
+    // bretelles : le soufflet monte dans la bretelle ; le passage de la main n'occupe que le haut (≈ 40 % sous la soudure)
+    var hCote = p.type==="bretelle" && p.S>0 ? Math.round((H-18)-0.4*((H-18)-ycBret)) : H;
     var tSoudure=null; // soufflet des sacs à bretelles : ligne de soudure au milieu (comme sur la photo)
     if(p.type==="bretelle" && p.S>0){ var cvSo=document.createElement("canvas"); cvSo.width=64; cvSo.height=256; var so=cvSo.getContext("2d");
       so.fillStyle=(p.couleurSac||{}).hex||"#ffffff"; so.fillRect(0, 0, 64, 256); so.fillStyle=so.createPattern(textureFace3D.grain, "repeat"); so.fillRect(0, 0, 64, 256);
@@ -2793,7 +2794,7 @@
     var tReliefCote=tex(relief(Math.max(3, D), hCote, K));
     (soufFond ? [] : [[0, -1], [L, 1]]).forEach(function(c){
       var g=new T.PlaneGeometry(2, hCote, 10, 40), pos=g.attributes.position, k, sv, y, t, zh, rentre, gonfle;
-      var creux = p.type==="bretelle" && p.S>0 ? Math.min(40, p.S*0.35) : 0; // haut du soufflet en arc : passage de la main arrondi
+      var creux = p.type==="bretelle" && p.S>0 ? Math.min(12, p.S*0.12) : 0; // haut du soufflet en arc : passage de la main arrondi
       for(k=0;k<pos.count;k++){ sv=pos.getX(k); y=pos.getY(k)+hCote/2; t=1-Math.abs(sv);
         if(creux) y=y*(hCote-creux*Math.sqrt(Math.max(0, 1-sv*sv)))/hCote;
         zh=demi(c[0], y);
