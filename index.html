@@ -713,6 +713,10 @@
     <div class="field"><label>🏷️ Remise appliquée par défaut</label>
       <select id="stRemiseCible"><option value="global">Global : sur tout le devis</option><option value="sacs">Sacs seulement (hors clichés, écrans, frais et services)</option></select>
       <div class="hint">Chaque ligne peut toujours être incluse ou exclue de la remise dans l'éditeur de lignes.</div></div>
+    <div class="field-row">
+      <div class="field"><label>Remise par défaut (%)</label><input id="stRemisePct" type="number" step="0.5" min="0" max="100" placeholder="5"></div>
+      <div class="field"><label>🎁 Remise 1er achat (%)</label><input id="stRemisePremierPct" type="number" step="0.5" min="0" max="100" placeholder="5"></div>
+    </div>
     <div class="field"><label>🧾 Prochain numéro de facture (année en cours)</label>
       <div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:600;">FA</span><input id="stProchainFacture" type="number" min="1" step="1" style="max-width:120px;" placeholder="161"><span id="stProchainFactureAnnee" style="font-weight:600;"></span></div>
       <div class="hint" id="stProchainFactureInfo">Ex. 161 → la prochaine facture sera FA161-2026, puis FA162-2026…</div></div>
@@ -894,6 +898,7 @@
     $("stTransport").value=(invoiceSettings.transportDefaut!=null&&invoiceSettings.transportDefaut!=="")?invoiceSettings.transportDefaut:"";
     $("stTransportGratuit").value=(invoiceSettings.transportGratuitDes!=null&&invoiceSettings.transportGratuitDes!=="")?invoiceSettings.transportGratuitDes:"";
     $("stRemiseCible").value=invoiceSettings.remiseCible==="sacs" ? "sacs" : "global";
+    $("stRemisePct").value=pctRemiseDefaut(false); $("stRemisePremierPct").value=pctRemiseDefaut(true);
     $("stFooter").value=invoiceSettings.piedPage||"";
     $("stEmailAlertes").value=invoiceSettings.emailAlertes||"";
     $("alertesStatus").textContent = invoiceSettings.alertesActives ? "✅ Alertes actives — envoyées chaque matin à 8h." : "Alertes désactivées.";
@@ -916,6 +921,8 @@
       transportDefaut: $("stTransport").value!=="" ? Number($("stTransport").value) : null,
       transportGratuitDes: $("stTransportGratuit").value!=="" ? Number($("stTransportGratuit").value) : null,
       remiseCible: $("stRemiseCible").value,
+      remisePctDefaut: $("stRemisePct").value!=="" ? Number($("stRemisePct").value) : 5,
+      remisePremierPct: $("stRemisePremierPct").value!=="" ? Number($("stRemisePremierPct").value) : 5,
       piedPage:$("stFooter").value.trim(), emailAlertes:$("stEmailAlertes").value.trim(), alertesActives:invoiceSettings.alertesActives });
     var btn=$("saveCompanyBtn"); btn.disabled=true; btn.textContent="Enregistrement…";
     var prochainFac = $("stProchainFacture").value.trim();
@@ -1563,6 +1570,8 @@
   }
   function sousTotalRemisable(lignes){ return lignes.reduce(function(t,l){ return t + (estHorsRemise(l) ? 0 : Number(l.total||0)); }, 0); }
   var MOTIFS_REMISE = { premier:"premier achat" };
+  // pourcentages proposés à l'ajout d'une remise (🏢 Paramètres), 5 % si non réglés
+  function pctRemiseDefaut(premier){ var s=invoiceSettings||{}, v=premier ? s.remisePremierPct : s.remisePctDefaut; return (v===null || v===undefined || v==="" || isNaN(Number(v))) ? 5 : Number(v); }
   function libelleRemise(r){
     var motif = MOTIFS_REMISE[r.motif];
     if(r.mode==="pct") return "Remise " + (motif ? motif+" " : "") + String(r.valeur).replace(".",",")+" %";
@@ -1757,7 +1766,7 @@
           ls.push(nouvelleLigneTransport(ls));
           if(!Number((invoiceSettings||{}).transportDefaut||0)) toast("Saisissez le montant du transport (montant par défaut : 🏢 Coordonnées de l'entreprise)");
         } else ls.push({ type:"remise", productId:"", designation:"Remise", quantity:1, unitPrice:0, total:0,
-          remise: e.target.classList.contains("ln-premier") ? {mode:"pct", valeur:5, motif:"premier"} : {mode:"pct", valeur:5} });
+          remise: e.target.classList.contains("ln-premier") ? {mode:"pct", valeur:pctRemiseDefaut(true), motif:"premier"} : {mode:"pct", valeur:pctRemiseDefaut(false)} });
         // remises et transport toujours en fin de document
         ls.sort(function(a,b){ var o=function(l){ return l.type==="remise"?1:l.type==="transport"?2:0; }; return o(a)-o(b); });
         c2.setLignes(ls); renderLinesEditor(containerId, ls);
