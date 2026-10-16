@@ -2028,6 +2028,7 @@
     h+='<div class="field-row"><div class="field"><label>Largeur (mm)</label><input id="gabL" type="number" min="50" step="5"></div><div class="field"><label>Hauteur (mm)</label><input id="gabH" type="number" min="50" step="5"></div>'
       +'<div class="field"><label>Soufflet (mm)</label><input id="gabS" type="number" min="0" step="5"></div><div class="field" id="gabHAChamp"><label id="gabHALibelle">Hauteur anses (mm)</label><input id="gabHA" type="number" min="0" step="5"></div></div>';
     h+='<div class="field-row"><div class="field"><label>Couleur du sac</label><select id="gabCoulSac"></select></div><div class="field" id="gabCoulAnsesChamp"><label>Couleur des anses</label><select id="gabCoulAnses"></select></div></div>';
+    h+='<label id="gabLanguetteChamp" style="display:none;gap:6px;align-items:center;margin-bottom:8px;"><input type="checkbox" id="gabLanguette"> Languette d\'accroche (avec fente) entre les bretelles</label>';
     h+='<div id="gabApercu" style="border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;max-height:520px;overflow:auto;text-align:center;"></div>';
     h+='<div class="item-row" style="gap:6px;margin-top:8px;flex-wrap:wrap;">'
       +'<button type="button" class="btn btn-primary btn-sm" id="gabJsx">⬇ Script Illustrator (.jsx)</button>'
@@ -2235,11 +2236,13 @@
       var lb=Math.round(L*0.25), c=HA>0 ? Math.round(Math.min(HA, H-40)) : Math.round(Math.min(H*0.38, L*0.45)), yc=H-c, rc=Math.round((L-2*lb)*0.22); // HA = hauteur des bretelles (0 = auto)
       var wl=Math.round(L*0.22), hl=Math.round(c*0.28), wf=Math.round(wl*0.8);
       poly(CAL.g, [[0,0],[L,0],[L,H],[L-lb,H],[L-lb,yc+rc]].concat(
-          ellipse(L-lb-rc, yc+rc, rc, rc, 0, -Math.PI/2, 10), [[L/2+wl/2, yc]],
-          ellipse(L/2, yc, wl/2, hl, 0, Math.PI, 24), [[lb+rc, yc]],
+          ellipse(L-lb-rc, yc+rc, rc, rc, 0, -Math.PI/2, 10),
+          p.languette ? [[L/2+wl/2, yc]].concat(ellipse(L/2, yc, wl/2, hl, 0, Math.PI, 24)) : [], [[lb+rc, yc]],
           ellipse(lb+rc, yc+rc, rc, rc, -Math.PI/2, -Math.PI, 10), [[lb,H],[0,H]]), {fill:sac.hex, stroke:TRAIT});
-      poly(CAL.g, rectArrondi(L/2-wf/2, yc-10, wf, 6, 3), {fill:"#ffffff", stroke:TRAIT, trou:true}); // fente d'accroche
-      texte(CAL.i, L/2, yc+hl+4, "languette d'accroche", 3, GRIS, "middle", 0);
+      if(p.languette){ // languette d'accroche (facultative)
+        poly(CAL.g, rectArrondi(L/2-wf/2, yc-10, wf, 6, 3), {fill:"#ffffff", stroke:TRAIT, trou:true});
+        texte(CAL.i, L/2, yc+hl+4, "languette d'accroche", 3, GRIS, "middle", 0);
+      }
       couture([[0,H-10],[lb,H-10]], false); couture([[L-lb,H-10],[L,H-10]], false);
       texte(CAL.i, lb/2, H-6, "soudure", 3, GRIS, "middle", 0); texte(CAL.i, L-lb/2, H-6, "soudure", 3, GRIS, "middle", 0);
       if(S>0){ texte(CAL.i, lb/2, yc+c*0.5, "passage main", 3, GRIS, "middle", 0); texte(CAL.i, lb/2, yc+c*0.5-4, "(soufflet ouvert)", 2.6, GRIS, "middle", 0);
@@ -2413,7 +2416,7 @@
     var opts=COULEURS_BAT.map(function(c){ return '<option value="'+c[1]+'">'+esc(c[0])+'</option>'; }).join("");
     $("gabCoulSac").innerHTML=opts; $("gabCoulAnses").innerHTML=opts;
     $("gabType").value=g.type; $("gabL").value=g.L; $("gabH").value=g.H; $("gabS").value=g.S||0; $("gabHA").value=g.HA||0;
-    $("gabCoulSac").value=g.sac||"#ffffff"; $("gabCoulAnses").value=g.anses||g.sac||"#ffffff";
+    $("gabCoulSac").value=g.sac||"#ffffff"; $("gabCoulAnses").value=g.anses||g.sac||"#ffffff"; $("gabLanguette").checked=!!g.languette;
     function remplirFormats(){
       var liste=formatsGabarit($("gabType").value);
       $("gabFormat").innerHTML='<option value="">Personnalisé</option>'+liste.map(function(f,i){ return '<option value="'+i+'">'+esc(f[0])+'</option>'; }).join("");
@@ -2421,19 +2424,19 @@
       liste.forEach(function(f,i){ if(f[1]===L && f[2]===H && f[3]===S) $("gabFormat").value=String(i); });
       var anses=/^(anse|box)$/.test($("gabType").value);
       var bret=$("gabType").value==="bretelle";
-      $("gabHAChamp").style.display=(anses||bret)?"":"none"; $("gabCoulAnsesChamp").style.display=anses?"":"none";
+      $("gabHAChamp").style.display=(anses||bret)?"":"none"; $("gabLanguetteChamp").style.display=bret?"flex":"none"; $("gabCoulAnsesChamp").style.display=anses?"":"none";
       $("gabHALibelle").textContent = bret ? "Hauteur bretelles (mm)" : "Hauteur anses (mm)";
       $("gabHA").placeholder = bret ? "auto" : "";
     }
     function params(){
       var nomC=function(sel){ return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : ""; };
-      return { type:$("gabType").value, L:Number($("gabL").value)||250, H:Number($("gabH").value)||350, S:Number($("gabS").value)||0, HA:Number($("gabHA").value)||0,
+      return { languette:$("gabLanguette").checked, type:$("gabType").value, L:Number($("gabL").value)||250, H:Number($("gabH").value)||350, S:Number($("gabS").value)||0, HA:Number($("gabHA").value)||0,
         couleurSac:{ nom:nomC($("gabCoulSac")), hex:$("gabCoulSac").value }, couleurAnses:{ nom:nomC($("gabCoulAnses")), hex:$("gabCoulAnses").value },
         impression:(b.couleurs||[]).map(function(c){ return { nom:c.nom }; }), client:b.nomCartouche||b.clientName||"" };
     }
     function maj(){
       var p=params(); gabaritCourant=p; if(siChange) siChange();
-      try{ localStorage.setItem(cle, JSON.stringify({ type:p.type, L:p.L, H:p.H, S:p.S, HA:p.HA, sac:p.couleurSac.hex, anses:p.couleurAnses.hex })); }catch(e){}
+      try{ localStorage.setItem(cle, JSON.stringify({ type:p.type, L:p.L, H:p.H, S:p.S, HA:p.HA, sac:p.couleurSac.hex, anses:p.couleurAnses.hex, languette:p.languette })); }catch(e){}
       $("gabApercu").innerHTML=gabaritSVG(geometrieSac(p)).replace(/^<\?xml[^>]*>\s*/,"").replace(/width="[\d.]+mm" height="[\d.]+mm"/,'style="width:100%;max-width:560px;height:auto;"');
     }
     $("gabType").addEventListener("change", function(){
@@ -2447,7 +2450,7 @@
       maj();
     });
     ["gabL","gabH","gabS","gabHA"].forEach(function(id){ $(id).addEventListener("input", function(){ remplirFormats(); maj(); }); });
-    ["gabCoulSac","gabCoulAnses"].forEach(function(id){ $(id).addEventListener("change", maj); });
+    ["gabCoulSac","gabCoulAnses","gabLanguette"].forEach(function(id){ $(id).addEventListener("change", maj); });
     remplirFormats(); maj();
     var nomGab=function(){ var p=params(); return ("Gabarit_"+p.type+"_"+p.L+"x"+p.H+(p.S?"_S"+p.S:"")+"_"+(b.nomCartouche||b.clientName||"client")).replace(/[^\w\-]+/g,"_"); };
     $("gabSvg").addEventListener("click", function(){ telechargerTexte(gabaritSVG(geometrieSac(params())), nomGab()+".svg", "image/svg+xml"); });
@@ -2734,15 +2737,19 @@
     function ouverture(x, y){
       if(!ouv) return 0;
       var sx=Math.pow(Math.max(0, Math.sin(Math.PI*x/L)), 0.55), t=Math.max(0, Math.min(1, (y/H-0.4)/0.6));
-      return ouv*sx*t*t*(3-2*t);
+      var fB = p.type==="bretelle" && y>ycBret ? Math.max(0, 1-(y-ycBret)/30) : 1; // les bretelles restent soudées
+      return ouv*sx*t*t*(3-2*t)*fB;
     }
     function demi(x, y){ return demiBase(x, y)+ouverture(x, y); }
     function demiBase(x, y){
       if(!(p.S>0)) return 1.5;                                   // sac plat : faces cousues sur les côtés
       if(soufLat && p.type==="bretelle"){                        // bretelles : soufflet plein jusqu'au bas de la découpe,
-        if(y<=ycBret) return p.S/2;                              // puis arche ovale (passage de la main) fermée par la soudure du haut
-        var tB=(y-ycBret)/(H-ycBret);
-        return Math.max(p.S*0.02, (p.S/2)*Math.sqrt(Math.max(0, 1-tB*tB)));
+        var yHaut=H-18; if(y>=yHaut) return 0.6;                 // bande soudée à plat sur 18 mm en haut
+        var y0=ycBret-50; if(y<=y0) return p.S/2;                // le soufflet commence à se resserrer 5 cm sous la découpe
+        var archeMax=(p.S/2)*0.15, tB=Math.max(0, (y-ycBret)/(yHaut-ycBret));
+        var arche = y<=ycBret ? archeMax : archeMax*Math.sqrt(Math.max(0, 1-tB*tB)); // passage de la main étroit
+        var tr=Math.min(1, (y-y0)/(ycBret+40-y0)); tr=tr*tr*(3-2*tr); // transition douce
+        return Math.max(0.6, (p.S/2)*(1-tr)+arche*tr);
       }
       if(soufLat) return p.S/2;                                  // Premium Box : soufflets latéraux
       return (p.S/2)*Math.pow(Math.max(0, Math.sin(Math.PI*x/L)), 0.35)*(1-0.7*Math.pow(Math.min(1, y/H), 1.3)); // fond en lentille, pincé aux coutures, s'affine en montant         // soufflet de fond : profondeur S au fond, se referme régulièrement jusqu'en haut
