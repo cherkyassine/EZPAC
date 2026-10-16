@@ -2026,7 +2026,7 @@
     h+='<div class="field-row"><div class="field"><label>Type de sac</label><select id="gabType">'+GABARIT_TYPES.map(function(t){ return '<option value="'+t[0]+'">'+esc(t[1])+'</option>'; }).join("")+'</select></div>'
       +'<div class="field"><label>Format</label><select id="gabFormat"></select></div></div>';
     h+='<div class="field-row"><div class="field"><label>Largeur (mm)</label><input id="gabL" type="number" min="50" step="5"></div><div class="field"><label>Hauteur (mm)</label><input id="gabH" type="number" min="50" step="5"></div>'
-      +'<div class="field"><label>Soufflet (mm)</label><input id="gabS" type="number" min="0" step="5"></div><div class="field" id="gabHAChamp"><label>Hauteur anses (mm)</label><input id="gabHA" type="number" min="0" step="5"></div></div>';
+      +'<div class="field"><label>Soufflet (mm)</label><input id="gabS" type="number" min="0" step="5"></div><div class="field" id="gabHAChamp"><label id="gabHALibelle">Hauteur anses (mm)</label><input id="gabHA" type="number" min="0" step="5"></div></div>';
     h+='<div class="field-row"><div class="field"><label>Couleur du sac</label><select id="gabCoulSac"></select></div><div class="field" id="gabCoulAnsesChamp"><label>Couleur des anses</label><select id="gabCoulAnses"></select></div></div>';
     h+='<div id="gabApercu" style="border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;max-height:520px;overflow:auto;text-align:center;"></div>';
     h+='<div class="item-row" style="gap:6px;margin-top:8px;flex-wrap:wrap;">'
@@ -2195,7 +2195,7 @@
   var GABARIT_FORMATS={
     poignee:[["20 × 25 cm",200,250,0,0],["22 × 29 cm",220,290,0,0],["25 × 35 cm",250,350,0,0],["30 × 37 cm",300,370,0,0],["40 × 50 cm · soufflet 10",400,500,100,0],["50 × 50 cm · soufflet 10",500,500,100,0]],
     anse:[["30 × 30 cm",300,300,0,250],["30 × 30 cm · soufflet 10",300,300,100,250],["30 × 39 cm",300,390,0,250],["39 × 40 cm",390,400,0,250],["40 × 50 cm · soufflet 10",400,500,100,250],["50 × 60 cm · soufflet 10",500,600,100,250]],
-    bretelle:[["Petit (à vérifier)",300,450,0,0],["Moyen (à vérifier)",350,550,0,0],["Grand (à vérifier)",400,600,0,0]],
+    bretelle:[["Petit · soufflet 8 (à vérifier)",300,450,80,0],["Moyen · soufflet 10 (à vérifier)",350,550,100,0],["Grand · soufflet 12 (à vérifier)",400,600,120,0]],
     box:[["Premium Box 25 × 27 cm · soufflet 17",250,270,170,115]]
   };
   // Géométrie de la face avant. Unités : mm, origine en bas à gauche du sac, y vers le haut.
@@ -2231,10 +2231,19 @@
     // corps du sac
     if(type==="bretelle"){
       titre="Sac à bretelles non-tissé";
-      var lb=Math.round(L*0.2), c=Math.round(H*0.3), yc=H-c, r=L/2-lb;
-      poly(CAL.g, [[0,0],[L,0],[L,H],[L-lb,H],[L-lb,yc+r]].concat(ellipse(L/2, yc+r, r, r, 0, -Math.PI, 36), [[lb,yc+r],[lb,H],[0,H]]), {fill:sac.hex, stroke:TRAIT});
-      couture([[0,H-12],[lb,H-12]], false); couture([[L-lb,H-12],[L,H-12]], false);
-      texte(CAL.i, L/2, H-6, "soudure / couture des bretelles", 3.2, GRIS, "middle", 0);
+      // bretelles larges (≈ 1/4 de la largeur), découpe en U à bords droits et fond plat, languette d'accroche au centre
+      var lb=Math.round(L*0.25), c=HA>0 ? Math.round(Math.min(HA, H-40)) : Math.round(Math.min(H*0.38, L*0.45)), yc=H-c, rc=Math.round((L-2*lb)*0.22); // HA = hauteur des bretelles (0 = auto)
+      var wl=Math.round(L*0.22), hl=Math.round(c*0.28), wf=Math.round(wl*0.8);
+      poly(CAL.g, [[0,0],[L,0],[L,H],[L-lb,H],[L-lb,yc+rc]].concat(
+          ellipse(L-lb-rc, yc+rc, rc, rc, 0, -Math.PI/2, 10), [[L/2+wl/2, yc]],
+          ellipse(L/2, yc, wl/2, hl, 0, Math.PI, 24), [[lb+rc, yc]],
+          ellipse(lb+rc, yc+rc, rc, rc, -Math.PI/2, -Math.PI, 10), [[lb,H],[0,H]]), {fill:sac.hex, stroke:TRAIT});
+      poly(CAL.g, rectArrondi(L/2-wf/2, yc-10, wf, 6, 3), {fill:"#ffffff", stroke:TRAIT, trou:true}); // fente d'accroche
+      texte(CAL.i, L/2, yc+hl+4, "languette d'accroche", 3, GRIS, "middle", 0);
+      couture([[0,H-10],[lb,H-10]], false); couture([[L-lb,H-10],[L,H-10]], false);
+      texte(CAL.i, lb/2, H-6, "soudure", 3, GRIS, "middle", 0); texte(CAL.i, L-lb/2, H-6, "soudure", 3, GRIS, "middle", 0);
+      if(S>0){ texte(CAL.i, lb/2, yc+c*0.5, "passage main", 3, GRIS, "middle", 0); texte(CAL.i, lb/2, yc+c*0.5-4, "(soufflet ouvert)", 2.6, GRIS, "middle", 0);
+               texte(CAL.i, L-lb/2, yc+c*0.5, "passage main", 3, GRIS, "middle", 0); texte(CAL.i, L-lb/2, yc+c*0.5-4, "(soufflet ouvert)", 2.6, GRIS, "middle", 0); }
       rappel(L-lb, yc, L+20, yc); cote(L+16, yc, L+16, H, c+" mm", 6);
       cote(L-lb, H+10, L, H+10, lb+" mm", 4); haut=H+18;
       zone=[20, 20, L-20, yc-15];
@@ -2266,7 +2275,10 @@
       }
     }
     // soufflet : pli du fond (sacs à poignée / anses / bretelles), vue de côté pour la Premium Box
-    if(S>0 && type!=="box"){
+    if(S>0 && type==="bretelle"){
+      couture([[S/2,0],[S/2,H]], false); couture([[L-S/2,0],[L-S/2,H]], false);
+      texte(CAL.i, S/2+2, 6, "soufflets latéraux repliés ("+S+" mm)", 3.2, GRIS, "start", 0);
+    } else if(S>0 && type!=="box"){
       couture([[0,S/2],[L,S/2]], false);
       texte(CAL.i, 3, S/2+2, "pli du soufflet de fond ("+S+" mm)", 3.2, GRIS, "start", 0);
     }
@@ -2362,16 +2374,36 @@
   }
 
   // Devine le type et les dimensions à partir du produit / des dimensions du BAT
+  // Type de sac reconnu dans un libellé (produit, titre du BAT)
+  function typeSacDepuisTexte(t){
+    t=String(t||"").toLowerCase();
+    if(/box|premium/.test(t)) return "box"; if(/bretel|t-?shirt|debardeur|débardeur/.test(t)) return "bretelle";
+    if(/poign|d[ée]coup|d-?cut/.test(t)) return "poignee"; if(/anse/.test(t)) return "anse"; return "";
+  }
+  // Dimensions lues dans un texte : « 30 x 40 cm », « 300×400 mm », « 40x50x10 », « 40 x 50 soufflet 10 » → mm
+  function dimsDepuisTexte(d){
+    d=String(d||""); var n=d.match(/\d+(?:[.,]\d+)?/g); if(!n || n.length<2) return null;
+    var v=function(x){ return parseFloat(String(x).replace(",",".")); }, k=/mm/i.test(d) ? 1 : (Math.max(v(n[0]), v(n[1]))<100 ? 10 : 1);
+    var so=d.match(/souf\w*\D*(\d+(?:[.,]\d+)?)/i);
+    return { L:Math.round(v(n[0])*k), H:Math.round(v(n[1])*k), S:so ? Math.round(v(so[1])*k) : (n.length>=3 && !/anse/i.test(d) ? Math.round(v(n[2])*k) : 0) };
+  }
+  // Formats proposés : produits du CRM de ce type (avec dimensions), puis formats standard
+  // (pour les bretelles, les formats provisoires ne sont gardés que s'il n'y a aucun produit « bretelle »)
+  function formatsGabarit(type){
+    var deCrm=(typeof products!=="undefined" ? products : []).filter(function(pr){ return typeSacDepuisTexte(pr.name)===type; }).map(function(pr){
+      var dm=dimsDepuisTexte(pr.dimensions) || dimsDepuisTexte(pr.name); if(!dm) return null;
+      var std=(GABARIT_FORMATS[type]||[])[0]||[];
+      return ["📦 "+pr.name+(pr.dimensions ? " ("+pr.dimensions+")" : ""), dm.L, dm.H, dm.S, type==="bretelle" ? 0 : (std[4]||0)];
+    }).filter(Boolean);
+    var vus={}; deCrm=deCrm.filter(function(f){ var c=f[1]+"x"+f[2]+"x"+f[3]; if(vus[c]) return false; vus[c]=1; return true; });
+    return deCrm.concat(type==="bretelle" && deCrm.length ? [] : (GABARIT_FORMATS[type]||[]));
+  }
   function gabaritDepuisBat(b){
-    var t=((b.produit||"")+" "+(b.titre||"")).toLowerCase(), type="anse";
-    if(/box|premium/.test(t)) type="box"; else if(/bretel/.test(t)) type="bretelle"; else if(/poign|d[ée]coup/.test(t)) type="poignee"; else if(/anse/.test(t)) type="anse";
-    var f=GABARIT_FORMATS[type][0], g={ type:type, L:f[1], H:f[2], S:f[3], HA:f[4] };
-    var d=String(b.dimensions||""), n=d.match(/\d+(?:[.,]\d+)?/g);
-    if(n && n.length>=2){
-      var k=/mm/i.test(d) ? 1 : (Math.max(parseFloat(n[0]),parseFloat(n[1]))<100 ? 10 : 1);
-      g.L=Math.round(parseFloat(n[0].replace(",","."))*k); g.H=Math.round(parseFloat(n[1].replace(",","."))*k);
-      var so=d.match(/souf\w*\D*(\d+(?:[.,]\d+)?)/i); g.S=so ? Math.round(parseFloat(so[1].replace(",","."))*k) : (n.length>=3 && !/anse/i.test(d) ? Math.round(parseFloat(n[2].replace(",","."))*k) : 0);
-    }
+    var type=typeSacDepuisTexte((b.produit||"")+" "+(b.titre||""))||"anse";
+    var f=formatsGabarit(type)[0], g={ type:type, L:f[1], H:f[2], S:f[3], HA:f[4] };
+    var pr=(typeof products!=="undefined" ? products : []).find(function(x){ return b.produit && String(x.name||"").toLowerCase()===String(b.produit).toLowerCase(); });
+    var dm=dimsDepuisTexte(b.dimensions) || (pr ? (dimsDepuisTexte(pr.dimensions) || dimsDepuisTexte(pr.name)) : null);
+    if(dm){ g.L=dm.L; g.H=dm.H; g.S=dm.S; }
     return g;
   }
   function initGabaritBat(b, siChange){
@@ -2383,12 +2415,15 @@
     $("gabType").value=g.type; $("gabL").value=g.L; $("gabH").value=g.H; $("gabS").value=g.S||0; $("gabHA").value=g.HA||0;
     $("gabCoulSac").value=g.sac||"#ffffff"; $("gabCoulAnses").value=g.anses||g.sac||"#ffffff";
     function remplirFormats(){
-      var liste=GABARIT_FORMATS[$("gabType").value]||[];
+      var liste=formatsGabarit($("gabType").value);
       $("gabFormat").innerHTML='<option value="">Personnalisé</option>'+liste.map(function(f,i){ return '<option value="'+i+'">'+esc(f[0])+'</option>'; }).join("");
       var L=Number($("gabL").value), H=Number($("gabH").value), S=Number($("gabS").value)||0;
       liste.forEach(function(f,i){ if(f[1]===L && f[2]===H && f[3]===S) $("gabFormat").value=String(i); });
       var anses=/^(anse|box)$/.test($("gabType").value);
-      $("gabHAChamp").style.display=anses?"":"none"; $("gabCoulAnsesChamp").style.display=anses?"":"none";
+      var bret=$("gabType").value==="bretelle";
+      $("gabHAChamp").style.display=(anses||bret)?"":"none"; $("gabCoulAnsesChamp").style.display=anses?"":"none";
+      $("gabHALibelle").textContent = bret ? "Hauteur bretelles (mm)" : "Hauteur anses (mm)";
+      $("gabHA").placeholder = bret ? "auto" : "";
     }
     function params(){
       var nomC=function(sel){ return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : ""; };
@@ -2402,12 +2437,12 @@
       $("gabApercu").innerHTML=gabaritSVG(geometrieSac(p)).replace(/^<\?xml[^>]*>\s*/,"").replace(/width="[\d.]+mm" height="[\d.]+mm"/,'style="width:100%;max-width:560px;height:auto;"');
     }
     $("gabType").addEventListener("change", function(){
-      var f=(GABARIT_FORMATS[$("gabType").value]||[])[0];
+      var f=formatsGabarit($("gabType").value)[0];
       if(f){ $("gabL").value=f[1]; $("gabH").value=f[2]; $("gabS").value=f[3]; $("gabHA").value=f[4]; }
       remplirFormats(); maj();
     });
     $("gabFormat").addEventListener("change", function(){
-      var f=(GABARIT_FORMATS[$("gabType").value]||[])[$("gabFormat").value];
+      var f=formatsGabarit($("gabType").value)[$("gabFormat").value];
       if(f){ $("gabL").value=f[1]; $("gabH").value=f[2]; $("gabS").value=f[3]; $("gabHA").value=f[4]; }
       maj();
     });
@@ -2575,7 +2610,7 @@
       for(j=0;j<q.pts.length;j++){ if(j) cx.lineTo(X(q.pts[j][0]), Y(q.pts[j][1])); else cx.moveTo(X(q.pts[j][0]), Y(q.pts[j][1])); }
       if(q.ferme) cx.closePath(); cx.stroke();
     }
-    if(p.type!=="box"){ cx.setLineDash([2.2*k, 1.6*k]); cx.beginPath(); cx.moveTo(X(5), 0); cx.lineTo(X(5), cv.height); cx.moveTo(X(L-5), 0); cx.lineTo(X(L-5), cv.height); cx.stroke(); }
+    if(p.type!=="box" && !(p.type==="bretelle" && p.S>0)){ cx.setLineDash([2.2*k, 1.6*k]); cx.beginPath(); cx.moveTo(X(5), 0); cx.lineTo(X(5), cv.height); cx.moveTo(X(L-5), 0); cx.lineTo(X(L-5), cv.height); cx.stroke(); }
     cx.setLineDash([]); cx.globalAlpha=1;
     [[0, 0, cv.width*0.12, 0], [cv.width, 0, cv.width*0.88, 0], [0, cv.height, 0, cv.height*0.9]].forEach(function(g){
       var d=cx.createLinearGradient(g[0], g[1], g[2], g[3]); d.addColorStop(0, "rgba(0,0,0,.14)"); d.addColorStop(1, "rgba(0,0,0,0)"); cx.fillStyle=d; cx.fillRect(0, 0, cv.width, cv.height); });
@@ -2693,8 +2728,9 @@
     else if(trous.length){ var xsT=trous[0].map(function(pt){ return pt[0]; }), ysT=trous[0].map(function(pt){ return pt[1]; });
       var yT=(Math.min.apply(null, ysT)+Math.max.apply(null, ysT))/2; pointsTension=[[Math.min.apply(null, xsT)+6, yT, 1.4], [Math.max.apply(null, xsT)-6, yT, 1.4]]; }
     var soufFond = p.S>0 && /^(poignee|anse)$/.test(p.type), soufLat = p.S>0 && !soufFond;
+    var ycBret = H-(p.HA>0 ? Math.round(Math.min(p.HA, H-40)) : Math.round(Math.min(H*0.38, L*0.45)));         // bas de la découpe en U des sacs à bretelles
     // ouverture du sac : les faces s'écartent vers le haut (en œil), les coutures des côtés restent fermées
-    var ouv = p.type==="box" ? 0 : p.type==="anse" ? Math.min(75, Math.max((p.S||0)*0.6, L*0.17)) : p.type==="poignee" ? Math.min(45, L*0.12) : Math.min(55, L*0.14);
+    var ouv = p.type==="box" ? 0 : p.type==="anse" ? Math.min(75, Math.max((p.S||0)*0.6, L*0.17)) : p.type==="poignee" ? Math.min(45, L*0.12) : Math.min(30, L*0.08);
     function ouverture(x, y){
       if(!ouv) return 0;
       var sx=Math.pow(Math.max(0, Math.sin(Math.PI*x/L)), 0.55), t=Math.max(0, Math.min(1, (y/H-0.4)/0.6));
@@ -2703,7 +2739,12 @@
     function demi(x, y){ return demiBase(x, y)+ouverture(x, y); }
     function demiBase(x, y){
       if(!(p.S>0)) return 1.5;                                   // sac plat : faces cousues sur les côtés
-      if(soufLat) return p.S/2;                                  // Premium Box, bretelles : soufflets latéraux
+      if(soufLat && p.type==="bretelle"){                        // bretelles : soufflet plein jusqu'au bas de la découpe,
+        if(y<=ycBret) return p.S/2;                              // puis arche ovale (passage de la main) fermée par la soudure du haut
+        var tB=(y-ycBret)/(H-ycBret);
+        return Math.max(p.S*0.02, (p.S/2)*Math.sqrt(Math.max(0, 1-tB*tB)));
+      }
+      if(soufLat) return p.S/2;                                  // Premium Box : soufflets latéraux
       return (p.S/2)*Math.pow(Math.max(0, Math.sin(Math.PI*x/L)), 0.35)*(1-0.7*Math.pow(Math.min(1, y/H), 1.3)); // fond en lentille, pincé aux coutures, s'affine en montant         // soufflet de fond : profondeur S au fond, se referme régulièrement jusqu'en haut
     }
     function tension(x, y){
@@ -2734,19 +2775,25 @@
     var ds=maillage(gDos, tissu(Object.assign({ map:tDos, side:T.FrontSide }, communs))); ds.customDepthMaterial=profondeur;
     maillage(gDos, matInt(communs), false);
     // côtés : soufflet latéral (pli rentrant en haut, sauf Premium Box rigide) / triangles du soufflet de fond / couture
-    var hCote = H;
+    var hCote = p.type==="bretelle" && p.S>0 ? ycBret : H;
+    var tSoudure=null; // soufflet des sacs à bretelles : ligne de soudure au milieu (comme sur la photo)
+    if(p.type==="bretelle" && p.S>0){ var cvSo=document.createElement("canvas"); cvSo.width=64; cvSo.height=256; var so=cvSo.getContext("2d");
+      so.fillStyle=(p.couleurSac||{}).hex||"#ffffff"; so.fillRect(0, 0, 64, 256); so.fillStyle=so.createPattern(textureFace3D.grain, "repeat"); so.fillRect(0, 0, 64, 256);
+      so.fillStyle=assombrir((p.couleurSac||{}).hex||"#ffffff", .8); so.fillRect(30, 0, 4, 256);
+      so.strokeStyle=assombrir((p.couleurSac||{}).hex||"#ffffff", .62); so.setLineDash([3, 2]); so.lineWidth=1; so.beginPath(); so.moveTo(29, 0); so.lineTo(29, 256); so.moveTo(35, 0); so.lineTo(35, 256); so.stroke();
+      tSoudure=tex(cvSo, true); }
     var tReliefCote=tex(relief(Math.max(3, D), hCote, K));
     (soufFond ? [] : [[0, -1], [L, 1]]).forEach(function(c){
       var g=new T.PlaneGeometry(2, hCote, 10, 40), pos=g.attributes.position, k, sv, y, t, zh, rentre, gonfle;
       for(k=0;k<pos.count;k++){ sv=pos.getX(k); y=pos.getY(k)+hCote/2; t=1-Math.abs(sv); zh=demi(c[0], y);
-        rentre = soufLat && p.type!=="box" ? zh*0.64*t*Math.max(0, (y-H*0.45)/(H*0.55)) : 0;
+        rentre = soufLat && p.type!=="box" ? zh*0.25*t*Math.min(1, Math.max(0, (y-hCote*0.5)/(hCote*0.5))) : 0;
         gonfle = soufLat && p.type!=="box" ? A*0.2*t*Math.sin(Math.PI*y/H) : 0;
         pos.setXYZ(k, c[0]+c[1]*(gonfle-rentre), y, (c[1]>0 ? -sv : sv)*zh); }
       g.computeVertexNormals();
-      maillage(g, tissu({ color:couleurSac, bumpMap:tReliefCote, side:T.FrontSide })); maillage(g, matInt(), false);
+      maillage(g, tissu(Object.assign({ color:couleurSac, bumpMap:tReliefCote, side:T.FrontSide }, tSoudure ? { map:tSoudure, color:0xffffff } : {}))); maillage(g, matInt(), false);
     });
-    // coutures latérales : petit rebord de tissu qui dépasse (comme sur les sacs cousus)
-    if(p.type!=="box"){
+    // coutures latérales : petit rebord de tissu qui dépasse (sacs cousus) — pas sur les bretelles à soufflet (côtés pliés)
+    if(p.type!=="box" && !(p.type==="bretelle" && p.S>0)){
       var mRebord=tissu({ color:couleurSac, bumpMap:tReliefCote, side:T.DoubleSide });
       if(soufFond) [[0, -1], [L, 1]].forEach(function(c){ // une seule couture : rebord plat de 12 mm + pointe au coin du bas
         var g=new T.PlaneGeometry(1, H+6, 1, 40), pos=g.attributes.position, k, u, y;
