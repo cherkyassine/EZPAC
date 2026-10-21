@@ -246,6 +246,7 @@
   <button class="bar-btn" id="dashBtn" title="Tableau de bord">📊</button>
   <button class="bar-btn" id="refreshBtn" title="Actualiser">↻</button>
   <button class="bar-btn" id="companyBtn" title="Coordonnées de l'entreprise" data-mut="1">🏢</button>
+  <button class="bar-btn" id="usersBtn" title="Utilisateurs et journal">👥</button>
   <button class="bar-btn" id="exportAllBtn" title="Sauvegarde : exporter tout le CRM (Excel)">💾</button>
   <button class="bar-btn" id="settingsBtn" title="Configuration">⚙</button>
 </div>
@@ -255,6 +256,9 @@
   <p>Collez l'adresse de votre service (fonction Supabase « ezpac-api »), puis votre clé d'accès. Ces informations restent sur cet appareil.</p>
   <div class="field"><label>URL du service</label><input id="setupUrl" placeholder="https://xxxx.supabase.co/functions/v1/ezpac-api"></div>
   <div class="field"><label>Clé d'accès</label><input id="setupKey" placeholder="Clé complète, ou clé lecture seule"></div>
+  <div class="hint" style="text-align:center;margin:4px 0 8px;">— ou avec votre compte —</div>
+  <div class="field-row"><div class="field"><label>Identifiant</label><input id="setupIdent" autocomplete="username" placeholder="ex : karim"></div>
+    <div class="field"><label>Mot de passe</label><input id="setupMdp" type="password" autocomplete="current-password"></div></div>
   <button class="btn btn-primary btn-block" id="setupSaveBtn">Connecter</button>
   <div class="hint" id="setupStatus" style="margin-top:12px;text-align:center;"></div>
 </div>
@@ -262,7 +266,7 @@
 <div id="dashScreen" class="dash" style="display:none;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
     <h2 style="margin:0;">Tableau de bord</h2>
-    <button type="button" class="btn btn-ghost btn-sm" id="backupBtn">💾 Sauvegarde complète</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;"><button type="button" class="btn btn-ghost btn-sm" id="rapportBtn">📄 Rapport mensuel</button><button type="button" class="btn btn-ghost btn-sm" id="exportComptaBtn">📊 Export comptable</button><button type="button" class="btn btn-ghost btn-sm" id="backupBtn">💾 Sauvegarde complète</button></div>
   </div>
   <div class="kpis" id="kpiRow"></div>
   <div class="dash-card">
@@ -277,6 +281,10 @@
   <div class="dash-grid">
     <div class="dash-card"><h4>Chiffre d'affaires facturé par mois</h4><canvas id="revChart" height="200"></canvas></div>
     <div class="dash-card"><h4>Top clients (facturé)</h4><div id="topClients"></div></div>
+  </div>
+  <div class="dash-grid">
+    <div class="dash-card"><h4>💰 Trésorerie : encaissé / dépensé (6 mois)</h4><canvas id="tresoChart" height="200"></canvas></div>
+    <div class="dash-card"><h4>⚠ À traiter</h4><div id="dashGestion"></div></div>
   </div>
   <div class="dash-grid">
     <div class="dash-card"><h4>Produits les plus vendus (quantité)</h4><div id="topProductsQty"></div></div>
@@ -296,6 +304,11 @@
         <button class="tab-btn" id="tabOrdersAll" data-tab="ordersAll">Commandes</button>
         <button class="tab-btn" id="tabCarriers" data-tab="carriers">Transporteurs</button>
         <button class="tab-btn" id="tabBats" data-tab="bats">🎨 BAT</button>
+        <button class="tab-btn" id="tabAtelier" data-tab="atelier">🏭 Atelier</button>
+        <button class="tab-btn" id="tabProspects" data-tab="prospects">🎯 Prospects</button>
+        <button class="tab-btn" id="tabDepenses" data-tab="depenses">💸 Dépenses</button>
+        <button class="tab-btn" id="tabRelances" data-tab="relances">🔔 Relances</button>
+        <button class="tab-btn" id="tabAgenda" data-tab="agenda">📅 Agenda</button>
       </div>
       <div class="filter-row" id="orderFilterRow" style="display:none;">
         <select id="orderStatusFilter">
@@ -717,6 +730,7 @@
       <div class="field"><label>Remise par défaut (%)</label><input id="stRemisePct" type="number" step="0.5" min="0" max="100" placeholder="5"></div>
       <div class="field"><label>🎁 Remise 1er achat (%)</label><input id="stRemisePremierPct" type="number" step="0.5" min="0" max="100" placeholder="5"></div>
     </div>
+    <div class="field"><label>⭐ Lien d'avis Google <span class="hint">(envoyé aux clients livrés : fiche Google → « Demander des avis »)</span></label><input id="stLienAvis" type="url" placeholder="https://g.page/r/…/review"></div>
     <div class="field"><label>🧾 Prochain numéro de facture (année en cours)</label>
       <div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:600;">FA</span><input id="stProchainFacture" type="number" min="1" step="1" style="max-width:120px;" placeholder="161"><span id="stProchainFactureAnnee" style="font-weight:600;"></span></div>
       <div class="hint" id="stProchainFactureInfo">Ex. 161 → la prochaine facture sera FA161-2026, puis FA162-2026…</div></div>
@@ -760,7 +774,7 @@
   var CFG = { url:"", key:"" };
   var appRole = "admin";
   var clients=[], orders=[], products=[], suppliers=[], documents=[], achats=[], tarifs=[], rappels=[], transporteurs=[], etiquettes=[];
-  var currentId = { clients:null, products:null, suppliers:null, quotes:null, invoices:null, carriers:null, bats:null };
+  var currentId = { clients:null, products:null, suppliers:null, quotes:null, invoices:null, carriers:null, bats:null, atelier:null, prospects:null, depenses:null, relances:null, agenda:null };
   var editingClientId=null, editingProductId=null, editingSupplierId=null;
   var activeTab = "clients";
   var invoiceSettings = { raisonSociale:'EZPAC', adresse:'Meryem 4 Z.I. Ain Atiq 12020 – Maroc', ice:'003254351000070', rc:'167169',
@@ -846,9 +860,12 @@
   function showApp(){ $("setupScreen").style.display="none"; $("dashScreen").style.display="none"; $("shell").style.display="grid"; }
   function showDash(){ $("setupScreen").style.display="none"; $("shell").style.display="none"; $("dashScreen").style.display="block"; renderDashboard(); }
   $("backupBtn").addEventListener("click", sauvegardeComplete);
+  $("rapportBtn").addEventListener("click", function(){ periodeChoisie("📄 Rapport d'activité", rapportMensuel); });
+  $("exportComptaBtn").addEventListener("click", function(){ periodeChoisie("📊 Export comptable (Excel)", exportComptable); });
   function applyRoleUI(){
     document.body.classList.toggle("read-only", appRole==="lecture");
     $("roleTag").style.display = appRole==="lecture" ? "inline-block" : "none";
+    appliquerDroitsUI();
   }
 
   $("settingsBtn").addEventListener("click", showSetup);
@@ -865,7 +882,7 @@
         designation:l.designation, quantite:l.quantity!=null?l.quantity:l.quantite, prixUnitaire:l.unitPrice!=null?l.unitPrice:l.prixUnitaire, total:l.total }); }); });
       var feuilles = { "Clients":clients, "Commandes":orders, "Devis-Factures-BL":documents, "Lignes documents":lignesDocs, "Produits":products,
         "Mouvements stock":mouvements, "Fournisseurs":suppliers, "Achats":achats, "Tarifs clients":tarifs, "Rappels":rappels,
-        "Transporteurs":transporteurs, "Etiquettes":etiquettes, "BAT":bats.map(function(b){ return { Titre:b.titre, Client:b.clientName, Dimensions:b.dimensions, Versions:(b.versions||[]).length, Statut:statutProjetBat(b).txt }; }), "Parametres":[invoiceSettings] };
+        "Transporteurs":transporteurs, "Etiquettes":etiquettes, "Dépenses":depenses.map(function(x){ return { Date:x.date, Catégorie:x.categorie, Libellé:x.libelle, Montant:x.montant, Mode:x.mode, Fournisseur:x.fournisseur }; }), "Prospects":prospects.map(function(p){ return { Nom:p.nom, Entreprise:p.entreprise, Téléphone:p.telephone, Source:p.source, Étape:nomEtapePro(p.etape), Besoin:p.besoin, "Montant estimé":p.montantEstime }; }), "BAT":bats.map(function(b){ return { Titre:b.titre, Client:b.clientName, Dimensions:b.dimensions, Versions:(b.versions||[]).length, Statut:statutProjetBat(b).txt }; }), "Parametres":[invoiceSettings] };
       var wb=XLSX.utils.book_new();
       Object.keys(feuilles).forEach(function(nom){ XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(plat(feuilles[nom])), nom.slice(0,31)); });
       XLSX.writeFile(wb, "ezpac-crm-sauvegarde-"+new Date().toISOString().slice(0,10)+".xlsx");
@@ -873,13 +890,23 @@
     }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
   }
   $("dashBtn").addEventListener("click", showDash);
+  $("usersBtn").addEventListener("click", function(){ ouvrirComptes(); });
   $("setupSaveBtn").addEventListener("click", function(){
     var u=$("setupUrl").value.trim(), k=$("setupKey").value.trim();
     if(!u || u.indexOf("http")!==0){ $("setupStatus").textContent="L'URL doit commencer par https://"; return; }
+    var ident=$("setupIdent").value.trim();
+    if(ident){ // compte utilisateur : le jeton remplace la clé
+      $("setupStatus").textContent="Connexion…"; var prev0={url:CFG.url,key:CFG.key}; CFG.url=u;
+      api({action:"connexion", identifiant:ident, motDePasse:$("setupMdp").value}).then(function(res){
+        saveCfg(u, res.jeton); appRole=res.role||"lecture"; appNom=res.nom||""; $("setupMdp").value=""; applyRoleUI();
+        $("setupStatus").textContent="Connecté : "+appNom; showApp(); refresh();
+      }).catch(function(e){ CFG.url=prev0.url; CFG.key=prev0.key; $("setupStatus").textContent="Échec : "+e.message; });
+      return;
+    }
     $("setupStatus").textContent="Connexion…";
     var prev={url:CFG.url,key:CFG.key}; CFG.url=u; CFG.key=k;
     api({action:"ping"}).then(function(res){
-      saveCfg(u,k); appRole = res.role || "admin"; applyRoleUI();
+      saveCfg(u,k); appRole = res.role || "admin"; appNom = res.compte ? (res.nom||"") : ""; applyRoleUI();
       $("setupStatus").textContent="Connecté."+(appRole==="lecture"?" (lecture seule)":""); showApp(); refresh();
     }).catch(function(e){
       CFG.url=prev.url; CFG.key=prev.key;
@@ -898,6 +925,7 @@
     $("stTransport").value=(invoiceSettings.transportDefaut!=null&&invoiceSettings.transportDefaut!=="")?invoiceSettings.transportDefaut:"";
     $("stTransportGratuit").value=(invoiceSettings.transportGratuitDes!=null&&invoiceSettings.transportGratuitDes!=="")?invoiceSettings.transportGratuitDes:"";
     $("stRemiseCible").value=invoiceSettings.remiseCible==="sacs" ? "sacs" : "global";
+    $("stLienAvis").value=invoiceSettings.lienAvisGoogle||"";
     $("stRemisePct").value=pctRemiseDefaut(false); $("stRemisePremierPct").value=pctRemiseDefaut(true);
     $("stFooter").value=invoiceSettings.piedPage||"";
     $("stEmailAlertes").value=invoiceSettings.emailAlertes||"";
@@ -921,6 +949,7 @@
       transportDefaut: $("stTransport").value!=="" ? Number($("stTransport").value) : null,
       transportGratuitDes: $("stTransportGratuit").value!=="" ? Number($("stTransportGratuit").value) : null,
       remiseCible: $("stRemiseCible").value,
+      lienAvisGoogle: $("stLienAvis").value.trim(),
       remisePctDefaut: $("stRemisePct").value!=="" ? Number($("stRemisePct").value) : 5,
       remisePremierPct: $("stRemisePremierPct").value!=="" ? Number($("stRemisePremierPct").value) : 5,
       piedPage:$("stFooter").value.trim(), emailAlertes:$("stEmailAlertes").value.trim(), alertesActives:invoiceSettings.alertesActives });
@@ -946,7 +975,7 @@
     }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
   });
   // ===================== SAUVEGARDE / RESTAURATION =====================
-  var ORDRE_RESTAURATION = ["parametres","compteurs","fournisseurs","transporteurs","clients","produits","commandes","tarifs","achats","etiquettes","documents","rappels","mouvements_stock","bats"];
+  var ORDRE_RESTAURATION = ["parametres","compteurs","fournisseurs","transporteurs","clients","produits","commandes","tarifs","achats","etiquettes","documents","rappels","mouvements_stock","bats","depenses","prospects"];
   $("sauvegardeBtn").addEventListener("click", function(){
     var btn=this; btn.disabled=true; $("sauvegardeStatus").textContent="Préparation de la sauvegarde…";
     api({action:"sauvegardeComplete"}).then(function(res){
@@ -1024,7 +1053,7 @@
     return api({action:"load"}).then(function(res){
       clients=res.clients||[]; orders=res.orders||[]; products=res.products||[];
       suppliers=res.suppliers||[]; documents=res.documents||[]; achats=res.achats||[];
-      tarifs=res.tarifs||[]; rappels=res.rappels||[]; transporteurs=res.transporteurs||[]; etiquettes=res.etiquettes||[]; batsDisponible=res.bats!==null; bats=res.bats||[];
+      tarifs=res.tarifs||[]; rappels=res.rappels||[]; transporteurs=res.transporteurs||[]; etiquettes=res.etiquettes||[]; batsDisponible=res.bats!==null; bats=res.bats||[]; gestionDisponible={ depenses:res.depenses!==null, prospects:res.prospects!==null }; depenses=res.depenses||[]; prospects=res.prospects||[];
       if(res.settings) invoiceSettings=corrigerParametres(res.settings);
       clients.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
       products.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
@@ -1082,6 +1111,7 @@
 
   // ---------- Tabs ----------
   function renderList(){
+    majCompteurRelances();
     if(activeTab==="clients") renderClientList();
     else if(activeTab==="products") renderProductList();
     else if(activeTab==="suppliers") renderSupplierList();
@@ -1089,12 +1119,17 @@
     else if(activeTab==="ordersAll") renderOrdersAllList();
     else if(activeTab==="carriers") renderCarrierList();
     else if(activeTab==="bats") renderBatList();
+    else if(activeTab==="atelier") renderAtelierList();
+    else if(activeTab==="prospects") renderProspectList();
+    else if(activeTab==="depenses") renderDepenseList();
+    else if(activeTab==="relances") renderRelanceList();
+    else if(activeTab==="agenda") renderAgendaList();
     else renderInvoiceList();
   }
-  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"📎 Ajouter des factures (fichiers)", ordersAll:"", carriers:"+ Nouveau transporteur", bats:"+ Nouveau BAT" };
+  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"📎 Ajouter des factures (fichiers)", ordersAll:"", carriers:"+ Nouveau transporteur", bats:"+ Nouveau BAT", atelier:"", prospects:"+ Nouveau prospect", depenses:"+ Nouvelle dépense", relances:"", agenda:"+ Rendez-vous" };
   function setTab(tab){
     activeTab=tab;
-    ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll","Carriers","Bats"].forEach(function(t){
+    ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll","Carriers","Bats","Atelier","Prospects","Depenses","Relances","Agenda"].forEach(function(t){
       $("tab"+t).classList.toggle("active", t.toLowerCase()===tab.toLowerCase());
     });
     $("searchInput").placeholder="Rechercher…";
@@ -1114,6 +1149,11 @@
   $("tabOrdersAll").addEventListener("click",function(){ setTab("ordersAll"); });
   $("tabCarriers").addEventListener("click",function(){ setTab("carriers"); });
   $("tabBats").addEventListener("click",function(){ setTab("bats"); });
+  $("tabAtelier").addEventListener("click",function(){ setTab("atelier"); });
+  $("tabProspects").addEventListener("click",function(){ setTab("prospects"); });
+  $("tabDepenses").addEventListener("click",function(){ setTab("depenses"); });
+  $("tabRelances").addEventListener("click",function(){ setTab("relances"); });
+  $("tabAgenda").addEventListener("click",function(){ setTab("agenda"); });
   $("newBtn").addEventListener("click", function(){
     if(activeTab==="clients") openClientModal(null);
     else if(activeTab==="products") openProductModal(null);
@@ -1121,6 +1161,9 @@
     else if(activeTab==="carriers") openCarrierModal(null);
     else if(activeTab==="invoices") ouvrirImportFactures();
     else if(activeTab==="bats") openBatModal(null, {});
+    else if(activeTab==="prospects") openProspectModal(null);
+    else if(activeTab==="depenses") openDepenseModal(null);
+    else if(activeTab==="agenda") openRdvModal(jourAgenda);
   });
   $("searchInput").addEventListener("input", renderList);
   $("orderStatusFilter").addEventListener("change", renderList);
@@ -1310,6 +1353,7 @@
     h+='<div class="item-row"><label class="hint" style="margin-right:4px;">Statut :</label><select class="sel" id="ost-'+esc(o.id)+'" data-mut="1">';
     ["Nouveau","En cours","Terminé","Annulé"].forEach(function(s){ h+='<option'+((o.status||"Nouveau")===s?' selected':'')+'>'+s+'</option>'; });
     h+='</select><button class="btn btn-ghost btn-sm" id="odel-'+esc(o.id)+'" data-mut="1">Supprimer</button></div>';
+    if(o.status!=="Annulé") h+=htmlFabrication(o);
     h+='<table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12.5px;">';
     lignes.forEach(function(l){
       h+='<tr><td style="padding:4px 0;">'+esc(l.designation)+'</td><td style="text-align:center;color:var(--ink-faint);">×'+l.quantity+'</td><td style="text-align:right;">'+nf(l.total)+'</td></tr>';
@@ -1354,6 +1398,7 @@
   }
 
   function wireOrder(o){
+    cablerFabrication(o, $("colDetail"));
     var sel=$("ost-"+o.id);
     if(sel){
       sel.addEventListener("click",function(e){e.stopPropagation();});
@@ -1886,6 +1931,19 @@
     if(d.statutDevis==="Demande web") h+='<div class="summary-bar">🌐 Demande reçue du site web : les prix des produits reconnus sont pré-remplis. Cliquez sur ✎ pour vérifier / compléter les prix, puis passez le statut à « En attente » avant d\x27envoyer le devis.</div>';
     if(d.notesClient) h+='<div class="notes-block" style="white-space:pre-line;border-color:var(--navy);"><strong>📝 Notes pour le client</strong> <span class="hint">(imprimées)</span><br>'+esc(d.notesClient)+'</div>';
     if(d.notes) h+='<div class="notes-block" style="white-space:pre-line;"><span class="hint">Note interne</span><br>'+esc(d.notes)+'</div>';
+    // aperçu 3D du sac pour le client
+    var lignesSacs=(d.lines||[]).map(function(l,i){ return {l:l, i:i}; }).filter(function(x){ return !estSpeciale(x.l) && !MOTS_HORS_REMISE.test(String(x.l.designation||"")); });
+    var apercus=(d.files||[]).filter(function(f){ return /^Apercu/i.test(f.name||""); });
+    if(lignesSacs.length){
+      var optsCoul=COULEURS_BAT.map(function(c){ return '<option value="'+c[1]+'">'+esc(c[0])+'</option>'; }).join("");
+      h+='<div class="section-head"><h3>🧊 Aperçu 3D pour le client</h3></div>';
+      if(apercus.length) h+='<div class="hint" style="margin-bottom:6px;">Joint au devis (envoyé en lien dans le WhatsApp) : '+apercus.map(function(f){ return '<a href="'+esc(f.url)+'" target="_blank" rel="noopener">📷 '+esc(f.name)+'</a>'; }).join(" · ")+'</div>';
+      h+='<div class="field-row"><div class="field"><label>Sac</label><select id="qaLigne">'+lignesSacs.map(function(x){ return '<option value="'+x.i+'">'+esc(x.l.designation||"Sac")+'</option>'; }).join("")+'</select></div>'
+        +'<div class="field"><label>Couleur du sac</label><select id="qaSac">'+optsCoul+'</select></div>'
+        +'<div class="field"><label>Impression</label><select id="qaImp"><option value="">Couleurs du logo</option>'+optsCoul+'</select></div></div>';
+      h+='<div class="field-row"><div class="field"><label>Logo / visuel du client <span class="hint">(sinon : dernière image de ses BAT)</span></label><input type="file" id="qaVisuel" accept="image/png,image/jpeg,image/svg+xml,image/webp"></div></div>';
+      h+='<div style="margin-bottom:14px;"><button type="button" class="btn btn-gold btn-sm" id="qaOuvrir">🧊 Voir le sac en 3D</button></div>';
+    }
     h+='<div class="section-head"><h3>Détail</h3>'+(d.statutDevis!=="Converti"?'<button class="btn btn-gold btn-sm" id="convertBtn" data-mut="1">✅ Convertir en commande</button>':'<span class="hint">Déjà converti en commande</span>')+'</div>';
     (d.lines||[]).forEach(function(l){
       h+='<div class="item-card"><div class="item-top" style="cursor:default;"><div><div class="item-title">'+esc(l.designation)+'</div>'
@@ -1914,6 +1972,7 @@
         .catch(function(e){ toast("Échec : "+e.message); });
     });
     $("xlsQBtn").addEventListener("click", function(){ exportDocumentExcel(d); });
+    if($("qaOuvrir")) $("qaOuvrir").addEventListener("click", function(){ ouvrirApercuDevis(d, this); });
     $("qStatut").addEventListener("change", function(){
       api({action:"updateDevisStatut", id:d.id, statutDevis:this.value}).then(function(){ toast("Statut mis à jour"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
     });
@@ -1924,6 +1983,39 @@
         toast("Commande créée depuis le devis"); return refresh().then(function(){ openRow("clients", d.clientId); setTab("clients"); });
       }).catch(function(e){ toast("Échec : "+e.message); cb.disabled=false; cb.textContent="✅ Convertir en commande"; });
     });
+  }
+
+  // Aperçu 3D d'un devis : type et dimensions repris du produit de la ligne (ou de sa désignation)
+  async function ouvrirApercuDevis(d, btn){
+    var l=(d.lines||[])[Number($("qaLigne").value)]||{}, pr=l.productId ? products.find(function(x){ return String(x.id)===String(l.productId); }) : null;
+    var type=typeSacDepuisTexte((pr ? pr.name : "")+" "+(l.designation||"")) || "anse";
+    var std=formatsGabarit(type)[0]||[0,250,350,0,0];
+    var dm=(pr && (dimsDepuisTexte(pr.dimensions) || dimsDepuisTexte(pr.name))) || dimsDepuisTexte(l.designation) || { L:std[1], H:std[2], S:std[3] };
+    var nomC=function(sel){ return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : ""; };
+    var p={ type:type, L:dm.L, H:dm.H, S:dm.S, HA:type==="bretelle" ? 0 : (std[4]||0),
+      couleurSac:{ nom:nomC($("qaSac")), hex:$("qaSac").value }, couleurAnses:{ nom:nomC($("qaSac")), hex:$("qaSac").value },
+      impression:$("qaImp").value ? [{ nom:nomC($("qaImp")) }] : [], client:d.clientName||"" };
+    var image=null, lib=btn.textContent; btn.disabled=true; btn.textContent="Préparation…";
+    try{
+      var f=$("qaVisuel").files[0];
+      if(f) image=await lireCommeDataUri(f);
+      else { // dernière image des BAT de ce client
+        var imgs=[]; bats.filter(function(b){ return String(b.clientId)===String(d.clientId); }).forEach(function(b){
+          (b.versions||[]).forEach(function(v){ (v.fichiers||[]).forEach(function(x){ if(/\.(png|jpe?g|svg|webp)$/i.test(x.name||"")) imgs.push({ url:x.url, date:v.date||"" }); }); });
+          (b.originaux||[]).forEach(function(x){ if(/\.(png|jpe?g|svg|webp)$/i.test(x.name||"")) imgs.push({ url:x.url, date:"" }); });
+        });
+        imgs.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+        if(imgs[0]){ try{ image=await lireCommeDataUri(await (await fetch(imgs[0].url)).blob()); }catch(e){ image=null; } }
+      }
+      var nom=("Apercu_3D_"+d.numero).replace(/[^\w\-]+/g,"_");
+      await ouvrirMockup3D(p, { image:image, taille:70, position:45, teinte:$("qaImp").value||null }, nom, async function(bl, nomFichier, b2){
+        var res=await envoyerFichiersBat([new File([bl], nomFichier, {type:"image/jpeg"})], b2); if(!res) return false;
+        await api({action:"joindreFichierDocument", id:d.id, fichier:res[0]});
+        toast("Aperçu joint au devis : il sera envoyé en lien avec le WhatsApp du devis"); refresh(); return true;
+      }, "📎 Joindre au devis "+d.numero);
+      if(!image) toast("Aucun logo : choisissez le visuel du client pour l'imprimer sur le sac");
+    }catch(e){ toast("Aperçu impossible : "+e.message); }
+    btn.disabled=false; btn.textContent=lib;
   }
 
   function supprimerDocument(d, kind){
@@ -2631,7 +2723,7 @@
     }
     return cv;
   }
-  async function ouvrirMockup3D(p, o, nom, joindre){
+  async function ouvrirMockup3D(p, o, nom, joindre, libelleJoindre){
     var T=await chargerThree(), P=geometrieSac(p), L=p.L, H=p.H, D=p.S>0 ? p.S : 8, i, q;
     var image=o.image ? await chargerImage(o.image) : null;
     // pièces 2D reprises du gabarit
@@ -2654,7 +2746,7 @@
       +'<button type="button" class="btn btn-ghost btn-sm" id="m3dAuto">⏸ Rotation auto</button>'
       +'<button type="button" class="btn btn-ghost btn-sm" id="m3dFace">↺ Vue de face</button>'
       +'<button type="button" class="btn btn-primary btn-sm" id="m3dJpg">⬇ Image 3D (JPG)</button>'
-      +'<button type="button" class="btn btn-gold btn-sm" id="m3dJoindre" data-mut="1">📎 Joindre au dernier BAT</button>'
+      +'<button type="button" class="btn btn-gold btn-sm" id="m3dJoindre" data-mut="1">'+esc(libelleJoindre||"📎 Joindre au dernier BAT")+'</button>'
       +'<button type="button" class="btn btn-ghost btn-sm" id="m3dFermer">✕ Fermer</button></div>'
       +'<div class="hint" style="text-align:center;padding:0 10px 10px;background:#fff;">Glisser pour tourner le sac · molette pour zoomer</div></div>';
     document.body.appendChild(ov);
@@ -3073,6 +3165,674 @@
     }).catch(function(err){ toast("Échec : "+err.message); }).then(function(){ btn.disabled=false; });
   }
 
+  // ===================== GESTION : ACOMPTES, FABRICATION, DÉPENSES, PROSPECTS, INDICATEURS =====================
+  var depenses=[], prospects=[], gestionDisponible={ depenses:true, prospects:true };
+  var arr2=function(n){ return Math.round(Number(n||0)*100)/100; };
+  var aujourdhui=function(){ var d=new Date(); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); };
+  var idLocal=function(p){ return p+Date.now().toString(36)+Math.random().toString(36).slice(2,6); };
+  var joursDepuis=function(jour){ if(!jour) return null; var t=new Date(String(jour).slice(0,10)+"T00:00:00").getTime(); if(isNaN(t)) return null; var a=new Date(); a.setHours(0,0,0,0); return Math.round((a.getTime()-t)/864e5); };
+  var dateCourte=function(jour){ if(!jour) return "—"; var d=new Date(String(jour).slice(0,10)+"T12:00:00"); return isNaN(d) ? String(jour) : d.toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"}); };
+  // Fenêtre de formulaire générique (créée à la volée)
+  function modaleGestion(titre, html, surEnregistrer){
+    var ov=document.createElement("div"); ov.className="overlay open";
+    ov.innerHTML='<div class="modal"><h3>'+esc(titre)+'</h3><form>'+html+'<div class="modal-actions"><button type="button" class="btn btn-ghost" data-annuler>Annuler</button><button type="submit" class="btn btn-primary">Enregistrer</button></div></form></div>';
+    document.body.appendChild(ov);
+    var form=ov.querySelector("form"), fermer=function(){ ov.remove(); }, appuiFond=false;
+    ov.querySelector("[data-annuler]").addEventListener("click", fermer);
+    ov.addEventListener("mousedown", function(e){ appuiFond = e.target===ov; });
+    ov.addEventListener("click", function(e){ if(e.target===ov && appuiFond) fermer(); });
+    form.addEventListener("submit", async function(e){
+      e.preventDefault(); var b=form.querySelector('[type="submit"]'); b.disabled=true;
+      try{ if(await surEnregistrer(form)!==false) fermer(); }catch(er){ toast("Échec : "+er.message); }
+      b.disabled=false;
+    });
+    var premier=form.querySelector("input,select,textarea"); if(premier) setTimeout(function(){ premier.focus(); }, 50);
+    return form;
+  }
+  var champ=function(label, html){ return '<div class="field"><label>'+label+'</label>'+html+'</div>'; };
+  var options=function(liste, val){ return liste.map(function(x){ var v=Array.isArray(x)?x[0]:x, t=Array.isArray(x)?x[1]:x; return '<option value="'+esc(v)+'"'+(String(v)===String(val==null?"":val)?' selected':'')+'>'+esc(t)+'</option>'; }).join(""); };
+  var valeurs=function(form){ var o={}; Array.prototype.forEach.call(form.querySelectorAll("[name]"), function(el){ o[el.name]=el.type==="checkbox" ? el.checked : el.value.trim(); }); return o; };
+
+  // ---------- 1) Acomptes et reste à payer ----------
+  var MODES_PAIEMENT=["Espèces","Virement","Chèque","Carte bancaire","Effet (traite)","Autre"];
+  function paiementsDoc(d){ return Array.isArray(d.paiements) ? d.paiements : []; }
+  function encaisseDoc(d){ var p=paiementsDoc(d); if(p.length) return arr2(p.reduce(function(s,x){ return s+Number(x.montant||0); },0)); return d.statutPaiement==="Payée" ? Number(d.totalTTC||0) : 0; }
+  function resteDoc(d){ return d.type!=="FACTURE" ? 0 : Math.max(0, arr2(Number(d.totalTTC||0)-encaisseDoc(d))); }
+  // jours de retard : après l'échéance si elle est fixée, sinon après 30 jours
+  function factureEnRetard(d){
+    if(d.type!=="FACTURE" || resteDoc(d)<=0.009) return 0;
+    if(d.echeance){ var j=joursDepuis(d.echeance); return j>0 ? j : 0; }
+    var j2=daysSince(d.date); return j2!=null && j2>30 ? j2 : 0;
+  }
+  function pillPaiement(d){
+    var st=d.statutPaiement||"Non payée", cls=st==="Payée"?"pill-success":st==="Partiellement payée"?"pill-amber":"pill-danger";
+    return '<span class="pill '+cls+'" style="margin-left:4px;">'+esc(st==="Partiellement payée" ? "Partielle · reste "+nf(resteDoc(d)) : st)+'</span>';
+  }
+  function htmlPaiements(d){
+    var p=paiementsDoc(d), enc=encaisseDoc(d), reste=resteDoc(d), dev=d.currency||"MAD";
+    var h='<div class="section-head"><h3>💰 Paiements</h3><span class="hint">Encaissé <b>'+nf(enc)+' '+dev+'</b> · Reste <b style="color:'+(reste>0?'var(--danger)':'var(--success)')+';">'+nf(reste)+' '+dev+'</b></span></div>';
+    var pct=Number(d.totalTTC||0)>0 ? Math.min(100, Math.round(enc/Number(d.totalTTC)*100)) : 0;
+    h+='<div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:-4px 0 10px;"><div style="height:100%;width:'+pct+'%;background:'+(reste>0?'#d99a1e':'var(--success)')+';"></div></div>';
+    if(!p.length && d.statutPaiement==="Payée") h+='<div class="hint" style="margin-bottom:8px;">Marquée « Payée » sans détail des paiements. <button type="button" class="btn btn-ghost btn-sm" id="payAnnuler" data-mut="1">Repasser en « Non payée »</button></div>';
+    p.slice().sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); }).forEach(function(x){
+      h+='<div class="item-row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0;"><span>'+dateCourte(x.date)+' · <b>'+nf(x.montant)+' '+dev+'</b> · '+esc(x.mode||"")+(x.note?' <span class="hint">('+esc(x.note)+')</span>':'')+'</span>'
+        +'<button type="button" class="btn btn-ghost btn-sm" data-pay-suppr="'+esc(x.id)+'" data-mut="1" title="Supprimer ce paiement" style="color:var(--danger);padding:3px 8px;">✕</button></div>';
+    });
+    if(reste>0){
+      h+='<div class="field-row" style="margin-top:8px;align-items:flex-end;">'
+        +'<div class="field"><label>Date</label><input type="date" id="payDate" value="'+aujourdhui()+'"></div>'
+        +'<div class="field"><label>Montant ('+dev+')</label><input type="number" id="payMontant" step="0.01" min="0" value="'+reste+'"></div>'
+        +'<div class="field"><label>Mode</label><select id="payMode">'+options(MODES_PAIEMENT,"Espèces")+'</select></div></div>';
+      h+='<div class="field"><input id="payNote" placeholder="Note (n° de chèque, référence du virement…)"></div>';
+      h+='<div class="item-row" style="gap:6px;flex-wrap:wrap;"><button type="button" class="btn btn-primary btn-sm" id="payAjout" data-mut="1">+ Enregistrer le paiement</button>'
+        +'<button type="button" class="btn btn-ghost btn-sm" id="payMoitie" data-mut="1">Acompte 50 %</button>'
+        +'<button type="button" class="btn btn-gold btn-sm" id="payRelance">💬 Relancer (WhatsApp)</button></div>';
+    }
+    h+='<div class="field" style="margin-top:10px;max-width:260px;"><label>📅 Échéance de paiement</label><input type="date" id="payEcheance" value="'+esc(d.echeance||"")+'" data-mut="1"></div>';
+    return h;
+  }
+  function cablerPaiements(d){
+    var envoyer=function(liste, echeance, msg){
+      var corps={ action:"savePaiements", id:d.id, paiements:liste }; if(echeance!==undefined) corps.echeance=echeance;
+      return api(corps).then(function(r){ toast(msg+(r.reste>0 ? " — reste "+nf(r.reste)+" "+(d.currency||"MAD") : " — facture soldée ✅")); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
+    };
+    var ajout=$("payAjout");
+    if(ajout) ajout.addEventListener("click", function(){
+      var m=arr2($("payMontant").value); if(!(m>0)){ toast("Indiquez un montant"); return; }
+      if(m>resteDoc(d)+0.009 && !confirm("Le montant dépasse le reste à payer ("+nf(resteDoc(d))+"). Continuer ?")) return;
+      var liste=paiementsDoc(d).slice();
+      if(!liste.length && d.statutPaiement==="Payée") liste=[];
+      liste.push({ id:idLocal("pay"), date:$("payDate").value||aujourdhui(), montant:m, mode:$("payMode").value, note:$("payNote").value.trim() });
+      envoyer(liste, undefined, "Paiement de "+nf(m)+" enregistré");
+    });
+    var moitie=$("payMoitie"); if(moitie) moitie.addEventListener("click", function(){ $("payMontant").value=arr2(Number(d.totalTTC||0)/2); });
+    var rel=$("payRelance");
+    if(rel) rel.addEventListener("click", function(){
+      var c=clients.find(function(x){ return String(x.id)===String(d.clientId); })||{}, tel=d.clientPhone||c.phone;
+      if(!tel){ toast("Ce client n'a pas de numéro de téléphone"); return; }
+      openWhatsapp(tel, "Bonjour "+(c.contactPerson||d.clientName||"")+",\n\nSauf erreur de notre part, il reste "+nf(resteDoc(d))+" "+(d.currency||"MAD")+" à régler sur la facture "+d.numero+" du "+fmtDate(d.date).split(" · ")[0]
+        +(d.echeance ? " (échéance le "+dateCourte(d.echeance)+")" : "")+".\n\nMerci de nous indiquer la date de règlement.\n\n"+((invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC"));
+    });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll("[data-pay-suppr]"), function(b){
+      b.addEventListener("click", function(){
+        if(!confirm("Supprimer ce paiement ?")) return;
+        envoyer(paiementsDoc(d).filter(function(x){ return x.id!==b.getAttribute("data-pay-suppr"); }), undefined, "Paiement supprimé");
+      });
+    });
+    var ech=$("payEcheance"); if(ech) ech.addEventListener("change", function(){ envoyer(paiementsDoc(d), ech.value, "Échéance enregistrée"); });
+    var ann=$("payAnnuler"); if(ann) ann.addEventListener("click", function(){
+      api({action:"updateDocumentPaiement", id:d.id, statutPaiement:"Non payée", datePaiement:""}).then(function(){ toast("Facture repassée en « Non payée »"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
+    });
+  }
+
+  // ---------- 2) Suivi de fabrication ----------
+  var ETAPES_FAB=[["bat","BAT validé"],["cliche","Cadre / cliché"],["impression","Impression"],["controle","Séchage et contrôle"],["emballage","Emballage"],["livre","Livré"]];
+  function prodCommande(o){ var p=(o.production && typeof o.production==="object") ? o.production : {}; return { etapes:Object.assign({}, p.etapes||{}), notes:p.notes||"" }; }
+  function batValideCommande(o){ var v=null; (bats||[]).forEach(function(b){ if(String(b.orderId)!==String(o.id)) return; (b.versions||[]).forEach(function(x){ if(x.statut==="valide") v=x.dateValidation||x.date||true; }); }); return v; }
+  function etapeFaite(o, k){ var e=prodCommande(o).etapes; return e[k] || (k==="bat" ? batValideCommande(o) : null); }
+  function avancementCommande(o){
+    var n=ETAPES_FAB.filter(function(e){ return etapeFaite(o, e[0]); }).length;
+    return { n:n, pct:Math.round(n/ETAPES_FAB.length*100), suivante:ETAPES_FAB.find(function(e){ return !etapeFaite(o, e[0]); })||null };
+  }
+  function commandeActive(o){ return o.status!=="Terminé" && o.status!=="Annulé"; }
+  function retardCommande(o){ if(!o.dateLivraison || !commandeActive(o) || etapeFaite(o,"livre")) return 0; var j=joursDepuis(o.dateLivraison); return j>0 ? j : 0; }
+  function barreAvancement(pct, couleur){ return '<div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+(couleur||"var(--success)")+';"></div></div>'; }
+  function htmlFabrication(o){
+    var av=avancementCommande(o), ret=retardCommande(o), id=esc(o.id);
+    var h='<div class="dash-card" style="margin:10px 0;padding:12px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
+      +'<b>🏭 Fabrication · '+av.n+'/'+ETAPES_FAB.length+'</b>'
+      +'<label class="hint" style="display:flex;gap:6px;align-items:center;">Livraison prévue <input type="date" data-fab-date="'+id+'" value="'+esc(o.dateLivraison||"")+'" data-mut="1"></label></div>';
+    h+=barreAvancement(av.pct, ret ? "var(--danger)" : av.n===ETAPES_FAB.length ? "var(--success)" : "#d99a1e");
+    if(ret) h+='<div style="color:var(--danger);font-size:12px;margin-top:4px;">⚠ En retard de '+ret+' jour(s)</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">';
+    ETAPES_FAB.forEach(function(e){
+      var fait=etapeFaite(o, e[0]), auto=e[0]==="bat" && !prodCommande(o).etapes.bat && batValideCommande(o);
+      h+='<label style="display:flex;gap:5px;align-items:center;padding:4px 9px;border-radius:14px;border:1px solid '+(fait?'var(--success)':'var(--line)')+';background:'+(fait?'rgba(26,160,88,.08)':'transparent')+';font-size:12.5px;cursor:pointer;">'
+        +'<input type="checkbox" data-fab-etape="'+e[0]+'" data-fab-order="'+id+'"'+(fait?' checked':'')+(auto?' disabled title="Validé dans le module BAT"':'')+' data-mut="1">'+esc(e[1])
+        +(fait && fait!==true ? ' <span class="hint">'+dateCourte(fait)+'</span>' : '')+'</label>';
+    });
+    h+='</div>';
+    var mg=margeCommande(o);
+    if(mg) h+='<div class="hint" style="margin-top:8px;" title="Vente HT − coût d\'achat des articles (prix d\'achat des produits) − dépenses liées à la commande">💹 Marge estimée : <b style="color:'+(mg.marge>=0?'var(--success)':'var(--danger)')+';">'+nf(mg.marge)+' MAD'+(mg.vente>0?' ('+Math.round(mg.marge/mg.vente*100)+' %)':'')+'</b>'
+      +' · vente HT '+nf(mg.vente)+' · achats '+nf(mg.achats)+(mg.depenses?' · dépenses '+nf(mg.depenses):'')+(mg.incomplet?' · <span style="color:#b07a10;">prix d\'achat manquant pour '+mg.incomplet+' article(s)</span>':'')+'</div>';
+    return h+'</div>';
+  }
+  function enregistrerFabrication(o, etapes, dateLivraison, message){
+    var corps={ id:o.id, production:Object.assign({}, (o.production && typeof o.production==="object") ? o.production : {}, { etapes:etapes }) };
+    if(dateLivraison!==undefined) corps.dateLivraison=dateLivraison;
+    // statut automatique : toutes les étapes faites → Terminé ; au moins une → En cours
+    var tmp=Object.assign({}, o, { production:corps.production }), n=avancementCommande(tmp).n, ns=o.status||"Nouveau";
+    if(commandeActive(o)){ if(n===ETAPES_FAB.length) ns="Terminé"; else if(n>0 && ns==="Nouveau") ns="En cours"; }
+    if(ns!==(o.status||"Nouveau")){ corps.status=ns; corps.statusHistory=(o.statusHistory||[]).concat([{ status:ns, at:new Date().toISOString() }]); }
+    return api({ action:"saveOrder", order:corps }).then(function(){ toast(message+(corps.status ? " — commande « "+corps.status+" »" : "")); refresh(); })
+      .catch(function(e){ toast(/production|date_livraison/.test(e.message) ? "Exécutez d'abord le script SQL 1-colonnes.sql dans Supabase." : "Échec : "+e.message); });
+  }
+  function cablerFabrication(o, racine){
+    racine=racine||document;
+    Array.prototype.forEach.call(racine.querySelectorAll('[data-fab-order="'+o.id+'"]'), function(cb){
+      cb.addEventListener("click", function(e){ e.stopPropagation(); });
+      cb.addEventListener("change", function(){
+        var et=prodCommande(o).etapes, k=cb.getAttribute("data-fab-etape");
+        if(cb.checked) et[k]=new Date().toISOString(); else delete et[k];
+        enregistrerFabrication(o, et, undefined, (ETAPES_FAB.find(function(x){ return x[0]===k; })||[])[1]+(cb.checked?" ✓":" décoché"));
+      });
+    });
+    Array.prototype.forEach.call(racine.querySelectorAll('[data-fab-date="'+o.id+'"]'), function(inp){
+      inp.addEventListener("click", function(e){ e.stopPropagation(); });
+      inp.addEventListener("change", function(){ enregistrerFabrication(o, prodCommande(o).etapes, inp.value, "Date de livraison enregistrée"); });
+    });
+  }
+  // Marge : vente HT (factures de la commande, sinon montant de la commande) − achats (prix d'achat des produits) − dépenses liées
+  function margeCommande(o){
+    var fac=documents.filter(function(d){ return String(d.orderId)===String(o.id) && (d.type==="FACTURE"||d.type==="AVOIR"); });
+    var vente=fac.length ? fac.reduce(function(s,d){ return s+(d.type==="AVOIR"?-1:1)*Number(d.totalHT||0); },0) : totalCommande(o);
+    var achats=0, incomplet=0, connu=false;
+    lignesDeCommande(o).forEach(function(l){
+      if(estSpeciale(l)) return;
+      var p=l.productId ? products.find(function(x){ return String(x.id)===String(l.productId); }) : null;
+      var aPrix = p && (l.sansImpression ? (p.purchasePlainPrice!=null && p.purchasePlainPrice!=="") || (p.purchasePlainTiers||[]).length : (p.purchasePrice!=null && p.purchasePrice!=="") || (p.purchaseTiers||[]).length);
+      if(aPrix){ achats+=Number(l.quantity||0)*Number(prixAchatParPalier(p, l.quantity, !!l.sansImpression)||0); connu=true; } else if(p) incomplet++;
+    });
+    var dep=depenses.filter(function(x){ return String(x.orderId)===String(o.id); }).reduce(function(s,x){ return s+Number(x.montant||0); },0);
+    if(!connu && !dep) return null;
+    return { vente:arr2(vente), achats:arr2(achats), depenses:arr2(dep), marge:arr2(vente-achats-dep), incomplet:incomplet };
+  }
+  // Onglet « Atelier » : commandes en cours, regroupées par prochaine étape
+  function renderAtelierList(){
+    var q=($("searchInput").value||"").toLowerCase().trim(), el=$("listScroll");
+    var actives=orders.filter(commandeActive).filter(function(o){ if(!q) return true; var c=clients.find(function(x){ return String(x.id)===String(o.clientId); })||{}; return [o.title,c.name].some(function(v){ return v && String(v).toLowerCase().indexOf(q)!==-1; }); });
+    var enRetard=actives.filter(function(o){ return retardCommande(o)>0; }).length;
+    var h='<div class="summary-bar">🏭 '+actives.length+' commande(s) en fabrication'+(enRetard?' · <b style="color:var(--danger);">'+enRetard+' en retard</b>':'')+'</div>';
+    if(!actives.length){ el.innerHTML=h+'<div class="empty-hint">Aucune commande en cours.</div>'; return; }
+    ETAPES_FAB.forEach(function(e){
+      var grp=actives.filter(function(o){ var s=avancementCommande(o).suivante; return s && s[0]===e[0]; })
+        .sort(function(a,b){ return String(a.dateLivraison||"9999").localeCompare(String(b.dateLivraison||"9999")); });
+      if(!grp.length) return;
+      h+='<div class="hint" style="margin:12px 4px 4px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;">À faire : '+esc(e[1])+' ('+grp.length+')</div>';
+      grp.forEach(function(o){
+        var c=clients.find(function(x){ return String(x.id)===String(o.clientId); })||{}, av=avancementCommande(o), ret=retardCommande(o);
+        h+='<div class="row-card" data-atelier="'+esc(o.id)+'"><div class="name">'+esc(c.name||"Client")+' · '+esc(o.title||"")+'</div>'
+          +'<div class="meta"><span>'+(o.dateLivraison ? '📅 '+dateCourte(o.dateLivraison) : '📅 date à fixer')+'</span>'+(ret?'<span style="color:var(--danger);">⚠ '+ret+' j de retard</span>':'<span>'+av.n+'/'+ETAPES_FAB.length+'</span>')+'</div>'
+          +'<div style="margin:6px 0;">'+barreAvancement(av.pct, ret?"var(--danger)":"#d99a1e")+'</div>'
+          +'<button type="button" class="btn btn-primary btn-sm" data-fab-suivante="'+esc(o.id)+'" data-mut="1">✓ '+esc(av.suivante[1])+'</button></div>';
+      });
+    });
+    el.innerHTML=h;
+    Array.prototype.forEach.call(el.querySelectorAll("[data-atelier]"), function(card){
+      card.addEventListener("click", function(){ var o=orders.find(function(x){ return String(x.id)===card.getAttribute("data-atelier"); }); if(o) goToOrder(o); });
+    });
+    Array.prototype.forEach.call(el.querySelectorAll("[data-fab-suivante]"), function(b){
+      b.addEventListener("click", function(e){
+        e.stopPropagation(); var o=orders.find(function(x){ return String(x.id)===b.getAttribute("data-fab-suivante"); }); if(!o) return;
+        var s=avancementCommande(o).suivante; if(!s) return; var et=prodCommande(o).etapes; et[s[0]]=new Date().toISOString();
+        b.disabled=true; enregistrerFabrication(o, et, undefined, s[1]+" ✓");
+      });
+    });
+  }
+  function renderAtelierDetail(){
+    var actives=orders.filter(commandeActive), dans14=function(o){ var j=joursDepuis(o.dateLivraison); return o.dateLivraison && j!=null && j<=0 && j>=-14; };
+    var ligne=function(o){ var c=clients.find(function(x){ return String(x.id)===String(o.clientId); })||{}, av=avancementCommande(o);
+      return '<div class="item-row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:7px 0;"><span><b>'+dateCourte(o.dateLivraison)+'</b> · '+esc(c.name||"")+' · '+esc(o.title||"")+'</span><span class="hint">'+(av.suivante?esc(av.suivante[1]):"prête")+' · '+av.pct+' %</span></div>'; };
+    var retards=actives.filter(function(o){ return retardCommande(o)>0; }).sort(function(a,b){ return String(a.dateLivraison).localeCompare(String(b.dateLivraison)); });
+    var proches=actives.filter(dans14).sort(function(a,b){ return String(a.dateLivraison).localeCompare(String(b.dateLivraison)); });
+    var sansDate=actives.filter(function(o){ return !o.dateLivraison; });
+    var h='<div class="detail-inner"><div class="head-block"><div><h2>🏭 Atelier</h2><div class="sub">Cochez les étapes au fur et à mesure (ou depuis la commande, dans la fiche client).</div></div></div>';
+    h+='<div class="section-head"><h3 style="color:var(--danger);">⚠ En retard ('+retards.length+')</h3></div>'+(retards.map(ligne).join("")||'<div class="hint">Aucune commande en retard.</div>');
+    h+='<div class="section-head"><h3>📅 À livrer dans les 14 jours ('+proches.length+')</h3></div>'+(proches.map(ligne).join("")||'<div class="hint">Rien de prévu.</div>');
+    if(sansDate.length) h+='<div class="section-head"><h3>❔ Sans date de livraison ('+sansDate.length+')</h3></div><div class="hint">Fixez une date dans la commande pour suivre les retards : '+sansDate.map(function(o){ return esc(o.title||""); }).join(", ")+'</div>';
+    $("colDetail").innerHTML=h+'</div>';
+  }
+
+  // ---------- 3) Dépenses ----------
+  var CATEGORIES_DEP=["Non tissé (matière)","Encres et produits","Cadres / clichés","Sous-traitance","Transport","Salaires","Loyer et charges","Électricité / eau","Matériel et entretien","Publicité","Frais bancaires","Autre"];
+  var moisDepenses=aujourdhui().slice(0,7);
+  function renderDepenseList(){
+    var el=$("listScroll");
+    if(!gestionDisponible.depenses){ el.innerHTML='<div class="empty-hint">Module Dépenses : exécutez d\'abord le script <b>1-colonnes.sql</b> dans Supabase, puis rechargez.</div>'; return; }
+    var q=($("searchInput").value||"").toLowerCase().trim();
+    var duMois=depenses.filter(function(x){ return String(x.date||"").slice(0,7)===moisDepenses; });
+    var liste=duMois.filter(function(x){ if(!q) return true; return [x.libelle,x.categorie,x.fournisseur].some(function(v){ return v && String(v).toLowerCase().indexOf(q)!==-1; }); })
+      .sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+    var total=duMois.reduce(function(s,x){ return s+Number(x.montant||0); },0), parCat={};
+    duMois.forEach(function(x){ parCat[x.categorie||"Autre"]=(parCat[x.categorie||"Autre"]||0)+Number(x.montant||0); });
+    var h='<div class="summary-bar" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><input type="month" id="depMois" value="'+moisDepenses+'"><span>Total : <b>'+nf(total)+' MAD</b></span></div>';
+    var cats=Object.keys(parCat).sort(function(a,b){ return parCat[b]-parCat[a]; });
+    if(cats.length) h+='<div class="hint" style="padding:0 6px 8px;">'+cats.map(function(c){ return esc(c)+' : <b>'+nf(parCat[c])+'</b>'; }).join(" · ")+'</div>';
+    h+=liste.map(function(x){
+      return '<div class="row-card'+(x.id===currentId.depenses?" active":"")+'" data-id="'+esc(x.id)+'"><div class="name">'+esc(x.libelle||x.categorie||"Dépense")+'</div>'
+        +'<div class="meta"><span>'+esc(x.categorie||"")+'</span><span>'+dateCourte(x.date)+'</span></div><div class="price">'+nf(x.montant)+' MAD'+(x.mode?' · '+esc(x.mode):'')+'</div></div>';
+    }).join("") || '<div class="empty-hint">Aucune dépense ce mois-ci.<br>Ajoutez-en une avec « + Nouvelle dépense ».</div>';
+    el.innerHTML=h;
+    $("depMois").addEventListener("change", function(){ moisDepenses=this.value||aujourdhui().slice(0,7); currentId.depenses=null; renderDepenseList(); renderDetail(); });
+    Array.prototype.forEach.call(el.querySelectorAll(".row-card"), function(card){ card.addEventListener("click", function(){ openRow("depenses", card.getAttribute("data-id")); }); });
+  }
+  function renderDepenseDetail(x){
+    var o=x.orderId ? orders.find(function(c){ return String(c.id)===String(x.orderId); }) : null;
+    var h='<div class="detail-inner"><div class="head-block"><div><h2>💸 '+esc(x.libelle||x.categorie||"Dépense")+'</h2><div class="sub">'+dateCourte(x.date)+' · '+esc(x.categorie||"")+'</div></div>'
+      +'<div class="head-actions"><button class="icon-btn" id="editDepBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="delDepBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
+    h+='<div class="info-grid"><div class="info-item"><div class="lbl">Montant</div><div class="val"><strong>'+nf(x.montant)+' MAD</strong></div></div>'
+      +'<div class="info-item"><div class="lbl">Mode</div><div class="val">'+esc(x.mode||"—")+'</div></div>'
+      +'<div class="info-item"><div class="lbl">Fournisseur</div><div class="val">'+esc(x.fournisseur||"—")+'</div></div>'
+      +'<div class="info-item"><div class="lbl">Commande liée</div><div class="val">'+(o?'<a href="#" id="depVoirCmd">'+esc(o.title||"commande")+'</a>':'—')+'</div></div></div>';
+    if(x.notes) h+='<div class="notes-block" style="white-space:pre-line;">'+esc(x.notes)+'</div>';
+    $("colDetail").innerHTML=h+'</div>';
+    $("editDepBtn").addEventListener("click", function(){ openDepenseModal(x); });
+    $("delDepBtn").addEventListener("click", function(){ if(!confirm("Supprimer cette dépense ?")) return;
+      api({action:"deleteDepense", id:x.id}).then(function(){ currentId.depenses=null; toast("Dépense supprimée"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); }); });
+    if(o) $("depVoirCmd").addEventListener("click", function(e){ e.preventDefault(); goToOrder(o); });
+  }
+  function openDepenseModal(x){
+    x=x||{ date:aujourdhui(), categorie:"Encres et produits", mode:"Espèces" };
+    var cmds=orders.filter(function(o){ return commandeActive(o) || String(o.id)===String(x.orderId); }).map(function(o){ var c=clients.find(function(k){ return String(k.id)===String(o.clientId); })||{}; return [o.id, (c.name?c.name+" · ":"")+(o.title||"")]; });
+    modaleGestion(x.id ? "Modifier la dépense" : "Nouvelle dépense",
+      '<div class="field-row">'+champ("Date *",'<input type="date" name="date" required value="'+esc(x.date||"")+'">')+champ("Montant TTC (MAD) *",'<input type="number" name="montant" step="0.01" min="0" required value="'+esc(x.montant==null?"":x.montant)+'">')+'</div>'
+      +'<div class="field-row">'+champ("Catégorie",'<select name="categorie">'+options(CATEGORIES_DEP, x.categorie)+'</select>')+champ("Mode de paiement",'<select name="mode">'+options(MODES_PAIEMENT, x.mode)+'</select>')+'</div>'
+      +champ("Libellé",'<input name="libelle" placeholder="Ex : 2 rouleaux non tissé blanc 80 g, encre plastisol blanche…" value="'+esc(x.libelle||"")+'">')
+      +'<div class="field-row">'+champ("Fournisseur",'<input name="fournisseur" list="depFournisseurs" value="'+esc(x.fournisseur||"")+'"><datalist id="depFournisseurs">'+suppliers.map(function(f){ return '<option value="'+esc(f.name)+'">'; }).join("")+'</datalist>')
+      +champ("Commande liée <span class=\"hint\">(pour la marge)</span>",'<select name="orderId"><option value="">— aucune —</option>'+options(cmds, x.orderId)+'</select>')+'</div>'
+      +champ("Notes",'<textarea name="notes" rows="2">'+esc(x.notes||"")+'</textarea>'),
+      function(form){ var v=valeurs(form); v.montant=arr2(v.montant); if(x.id) v.id=x.id;
+        return api({action:"saveDepense", depense:v}).then(function(r){ currentId.depenses=r.id; moisDepenses=String(v.date).slice(0,7); toast("Dépense enregistrée"); refresh(); }); });
+  }
+
+  // ---------- 4) Prospects ----------
+  var ETAPES_PRO=[["nouveau","🆕 Nouveau"],["contacte","📞 Contacté"],["devis","📄 Devis envoyé"],["negociation","🤝 Négociation"],["gagne","✅ Gagné"],["perdu","❌ Perdu"]];
+  var SOURCES_PRO=["Site web","WhatsApp","Instagram","Facebook","Téléphone","Bouche-à-oreille","Salon / événement","Visite","Autre"];
+  var nomEtapePro=function(k){ return (ETAPES_PRO.find(function(e){ return e[0]===k; })||ETAPES_PRO[0])[1]; };
+  function relanceDue(p){ if(!p.relanceLe || p.etape==="gagne" || p.etape==="perdu") return false; var j=joursDepuis(p.relanceLe); return j!=null && j>=0; }
+  function statsProspects(){
+    var g=prospects.filter(function(p){ return p.etape==="gagne"; }).length, pe=prospects.filter(function(p){ return p.etape==="perdu"; }).length;
+    return { actifs:prospects.filter(function(p){ return p.etape!=="gagne" && p.etape!=="perdu"; }).length, gagnes:g, perdus:pe, taux:(g+pe)?Math.round(g/(g+pe)*100):null, relances:prospects.filter(relanceDue).length };
+  }
+  function renderProspectList(){
+    var el=$("listScroll");
+    if(!gestionDisponible.prospects){ el.innerHTML='<div class="empty-hint">Module Prospects : exécutez d\'abord le script <b>1-colonnes.sql</b> dans Supabase, puis rechargez.</div>'; return; }
+    var q=($("searchInput").value||"").toLowerCase().trim(), st=statsProspects();
+    var h='<div class="summary-bar">'+st.actifs+' en cours'+(st.relances?' · <b style="color:var(--danger);">'+st.relances+' à relancer</b>':'')+(st.taux!=null?' · conversion <b>'+st.taux+' %</b>':'')+'</div>';
+    var liste=prospects.filter(function(p){ if(!q) return true; return [p.nom,p.entreprise,p.telephone,p.besoin,p.ville].some(function(v){ return v && String(v).toLowerCase().indexOf(q)!==-1; }); });
+    ETAPES_PRO.forEach(function(e){
+      var grp=liste.filter(function(p){ return (p.etape||"nouveau")===e[0]; }).sort(function(a,b){ return (relanceDue(b)?1:0)-(relanceDue(a)?1:0) || String(b.updatedAt||b.createdAt).localeCompare(String(a.updatedAt||a.createdAt)); });
+      if(!grp.length) return;
+      h+='<div class="hint" style="margin:12px 4px 4px;font-weight:700;">'+esc(e[1])+' ('+grp.length+')</div>';
+      h+=grp.map(function(p){
+        return '<div class="row-card'+(p.id===currentId.prospects?" active":"")+'" data-id="'+esc(p.id)+'"><div class="name">'+esc(p.entreprise||p.nom||"Prospect")+(relanceDue(p)?' <span style="color:var(--danger);font-size:11px;">🔔 relance</span>':'')+'</div>'
+          +'<div class="meta"><span>'+esc(p.entreprise?p.nom||"":p.ville||"")+'</span><span>'+esc(p.source||"")+'</span></div>'
+          +(p.besoin||p.montantEstime?'<div class="price">'+esc(String(p.besoin||"").slice(0,60))+(p.montantEstime?' · ~'+nf(p.montantEstime)+' MAD':'')+'</div>':'')+'</div>';
+      }).join("");
+    });
+    el.innerHTML=h+(liste.length?'':'<div class="empty-hint">Aucun prospect.<br>Notez ici les personnes intéressées qui ne sont pas encore clientes.</div>');
+    Array.prototype.forEach.call(el.querySelectorAll(".row-card"), function(card){ card.addEventListener("click", function(){ openRow("prospects", card.getAttribute("data-id")); }); });
+  }
+  function sauverProspect(p, message){ return api({action:"saveProspect", prospect:p}).then(function(r){ currentId.prospects=r.id||p.id; if(message) toast(message); refresh(); }).catch(function(e){ toast("Échec : "+e.message); }); }
+  function renderProspectDetail(p){
+    var cl=p.clientId ? clients.find(function(c){ return String(c.id)===String(p.clientId); }) : null;
+    var h='<div class="detail-inner"><div class="head-block"><div><h2>🎯 '+esc(p.entreprise||p.nom||"Prospect")+'</h2><div class="sub">'+esc(p.entreprise?p.nom||"":"")+(p.ville?' · '+esc(p.ville):'')+' · '+nomEtapePro(p.etape)+'</div></div>'
+      +'<div class="head-actions"><button class="icon-btn" id="editProBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="delProBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
+    h+='<div class="info-grid"><div class="info-item"><div class="lbl">Téléphone</div><div class="val">'+esc(p.telephone||"—")+'</div></div>'
+      +'<div class="info-item"><div class="lbl">Email</div><div class="val">'+esc(p.email||"—")+'</div></div>'
+      +'<div class="info-item"><div class="lbl">Source</div><div class="val">'+esc(p.source||"—")+'</div></div>'
+      +'<div class="info-item"><div class="lbl">Montant estimé</div><div class="val">'+(p.montantEstime?nf(p.montantEstime)+' MAD':'—')+'</div></div></div>';
+    if(p.besoin) h+='<div class="notes-block" style="white-space:pre-line;"><b>Besoin :</b> '+esc(p.besoin)+'</div>';
+    h+='<div class="field-row"><div class="field"><label>Étape</label><select id="proEtape" data-mut="1">'+options(ETAPES_PRO, p.etape||"nouveau")+'</select></div>'
+      +'<div class="field"><label>🔔 Relancer le</label><input type="date" id="proRelance" value="'+esc(p.relanceLe||"")+'" data-mut="1"></div></div>';
+    if(p.etape==="perdu") h+='<div class="field"><label>Raison de la perte</label><input id="proRaison" value="'+esc(p.raisonPerte||"")+'" placeholder="Prix, délai, a choisi un concurrent…" data-mut="1"></div>';
+    h+='<div class="item-row" style="gap:6px;flex-wrap:wrap;margin:6px 0 14px;">'
+      +(p.telephone?'<button type="button" class="btn btn-gold btn-sm" id="proWa">💬 WhatsApp</button>':'')
+      +(cl?'<button type="button" class="btn btn-ghost btn-sm" id="proVoirClient">👤 Voir le client</button>':'<button type="button" class="btn btn-primary btn-sm" id="proClient" data-mut="1">➡ Créer le client (pour faire le devis)</button>')+'</div>';
+    if(p.notes) h+='<div class="notes-block" style="white-space:pre-line;">'+esc(p.notes)+'</div>';
+    var hist=(p.historique||[]).slice().reverse();
+    if(hist.length) h+='<div class="history"><div class="h-title">Historique</div>'+hist.map(function(x){ return '<div class="h-item"><span class="h-dot"></span><span><strong>'+esc(nomEtapePro(x.etape))+'</strong> — <span class="h-when">'+fmtDate(x.at)+'</span></span></div>'; }).join("")+'</div>';
+    $("colDetail").innerHTML=h+'</div>';
+    $("editProBtn").addEventListener("click", function(){ openProspectModal(p); });
+    $("delProBtn").addEventListener("click", function(){ if(!confirm("Supprimer ce prospect ?")) return;
+      api({action:"deleteProspect", id:p.id}).then(function(){ currentId.prospects=null; toast("Prospect supprimé"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); }); });
+    $("proEtape").addEventListener("change", function(){ var e=this.value;
+      sauverProspect(Object.assign({}, p, { etape:e, historique:(p.historique||[]).concat([{ etape:e, at:new Date().toISOString() }]) }), "Étape : "+nomEtapePro(e)); });
+    $("proRelance").addEventListener("change", function(){ sauverProspect(Object.assign({}, p, { relanceLe:this.value }), "Relance programmée"); });
+    if($("proRaison")) $("proRaison").addEventListener("change", function(){ sauverProspect(Object.assign({}, p, { raisonPerte:this.value.trim() }), "Raison enregistrée"); });
+    if($("proWa")) $("proWa").addEventListener("click", function(){ openWhatsapp(p.telephone, "Bonjour "+(p.nom||"")+",\n\nC'est EZPAC, suite à votre demande de sacs personnalisés"+(p.besoin?" ("+p.besoin+")":"")+". Avez-vous pu avancer sur votre projet ? Nous pouvons vous envoyer un devis et un aperçu 3D gratuit de votre sac.\n\n"+((invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC")); });
+    if($("proVoirClient")) $("proVoirClient").addEventListener("click", function(){ currentId.clients=cl.id; setTab("clients"); });
+    if($("proClient")) $("proClient").addEventListener("click", function(){
+      var b=this; b.disabled=true;
+      api({action:"saveClient", client:{ name:p.entreprise||p.nom, contactPerson:p.entreprise?p.nom:"", phone:p.telephone||"", email:p.email||"", notes:"Prospect ("+(p.source||"")+")"+(p.besoin?" : "+p.besoin:"") }})
+        .then(function(r){ var e=(p.etape==="nouveau"||p.etape==="contacte") ? "devis" : p.etape;
+          return api({action:"saveProspect", prospect:Object.assign({}, p, { clientId:r.id, etape:e, historique:(p.historique||[]).concat(e!==p.etape?[{ etape:e, at:new Date().toISOString() }]:[]) })}).then(function(){ return r.id; }); })
+        .then(function(idc){ toast("Client créé — faites maintenant le devis"); return refresh().then(function(){ currentId.clients=idc; setTab("clients"); }); })
+        .catch(function(e){ toast("Échec : "+e.message); b.disabled=false; });
+    });
+  }
+  function openProspectModal(p){
+    p=p||{ etape:"nouveau", source:"WhatsApp" };
+    modaleGestion(p.id ? "Modifier le prospect" : "Nouveau prospect",
+      '<div class="field-row">'+champ("Nom *",'<input name="nom" required value="'+esc(p.nom||"")+'">')+champ("Entreprise / commerce",'<input name="entreprise" value="'+esc(p.entreprise||"")+'">')+'</div>'
+      +'<div class="field-row">'+champ("Téléphone",'<input name="telephone" type="tel" value="'+esc(p.telephone||"")+'">')+champ("Email",'<input name="email" type="email" value="'+esc(p.email||"")+'">')+'</div>'
+      +'<div class="field-row">'+champ("Ville",'<input name="ville" value="'+esc(p.ville||"")+'">')+champ("Source",'<select name="source">'+options(SOURCES_PRO, p.source)+'</select>')+'</div>'
+      +champ("Besoin",'<textarea name="besoin" rows="2" placeholder="Ex : 500 sacs à anses 40×50 bleu marine, logo 1 couleur">'+esc(p.besoin||"")+'</textarea>')
+      +'<div class="field-row">'+champ("Montant estimé (MAD)",'<input name="montantEstime" type="number" step="1" min="0" value="'+esc(p.montantEstime==null?"":p.montantEstime)+'">')+champ("Étape",'<select name="etape">'+options(ETAPES_PRO, p.etape)+'</select>')+champ("Relancer le",'<input name="relanceLe" type="date" value="'+esc(p.relanceLe||"")+'">')+'</div>'
+      +champ("Notes",'<textarea name="notes" rows="2">'+esc(p.notes||"")+'</textarea>'),
+      function(form){ var v=valeurs(form); v.montantEstime = v.montantEstime==="" ? null : Number(v.montantEstime);
+        var obj=Object.assign({}, p, v); if(!p.id || v.etape!==p.etape) obj.historique=(p.historique||[]).concat([{ etape:v.etape, at:new Date().toISOString() }]);
+        return api({action:"saveProspect", prospect:obj}).then(function(r){ currentId.prospects=r.id; toast("Prospect enregistré"); refresh(); }); });
+  }
+
+  // ---------- 5) Indicateurs et trésorerie (tableau de bord) ----------
+  var tresoChartInstance=null;
+  function moisDe(jour){ return String(jour||"").slice(0,7); }
+  function caMois(m){ return documents.filter(function(d){ return (d.type==="FACTURE"||d.type==="AVOIR") && moisDe(d.date)===m; }).reduce(function(s,d){ return s+(d.type==="AVOIR"?-1:1)*Number(d.totalTTC||0); },0); }
+  function moisDecale(n){ var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+n); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2); }
+  function kpisGestion(){
+    var m=moisDecale(0), mp=moisDecale(-1), ca=caMois(m), cap=caMois(mp), evol=cap>0 ? Math.round((ca-cap)/cap*100) : null;
+    var il90=Date.now()-90*864e5, devis=documents.filter(function(d){ return d.type==="DEVIS" && new Date(d.date||d.createdAt).getTime()>=il90; });
+    var gagnes=devis.filter(function(d){ return d.statutDevis==="Accepté" || d.statutDevis==="Converti"; }).length, taux=devis.length ? Math.round(gagnes/devis.length*100) : null;
+    var fac12=factures().filter(function(d){ return new Date(d.date).getTime()>=Date.now()-365*864e5; }), panier=fac12.length ? fac12.reduce(function(s,d){ return s+Number(d.totalTTC||0); },0)/fac12.length : 0;
+    var retards=orders.filter(function(o){ return retardCommande(o)>0; }).length, depM=depenses.filter(function(x){ return moisDe(x.date)===m; }).reduce(function(s,x){ return s+Number(x.montant||0); },0);
+    var st=statsProspects();
+    var kpi=function(l,v,c,sous){ return '<div class="kpi"><div class="lbl">'+l+'</div><div class="val"'+(c?' style="color:'+c+';"':'')+'>'+v+'</div>'+(sous?'<div class="hint" style="font-size:11px;">'+sous+'</div>':'')+'</div>'; };
+    return kpi("CA du mois", nf(ca)+" MAD", null, evol==null ? "" : (evol>=0?"▲ +":"▼ ")+evol+" % vs mois dernier")
+      + kpi("Devis transformés (90 j)", taux==null ? "—" : taux+" %", null, gagnes+" / "+devis.length+" devis")
+      + kpi("Panier moyen (12 mois)", nf(panier)+" MAD")
+      + kpi("Commandes en retard", retards, retards ? "var(--danger)" : null)
+      + kpi("Dépenses du mois", nf(depM)+" MAD")
+      + kpi("Prospects en cours", st.actifs, null, (st.relances?st.relances+" à relancer · ":"")+(st.taux!=null?"conversion "+st.taux+" %":""));
+  }
+  function renderTresorerie(){
+    var mois=[]; for(var i=-5;i<=0;i++) mois.push(moisDecale(i));
+    var entrees={}, sorties={}; mois.forEach(function(m){ entrees[m]=0; sorties[m]=0; });
+    factures().forEach(function(d){
+      var p=paiementsDoc(d);
+      if(p.length) p.forEach(function(x){ var m=moisDe(x.date); if(m in entrees) entrees[m]+=Number(x.montant||0); });
+      else if(d.statutPaiement==="Payée"){ var m2=moisDe(d.datePaiement||d.date); if(m2 in entrees) entrees[m2]+=Number(d.totalTTC||0); }
+    });
+    depenses.forEach(function(x){ var m=moisDe(x.date); if(m in sorties) sorties[m]+=Number(x.montant||0); });
+    achats.forEach(function(a){ if(a.statutPaiement==="Payée"){ var m=moisDe(a.datePaiement||a.createdAt); if(m in sorties) sorties[m]+=totalAchat(a); } });
+    var etiquette=function(m){ return new Date(m+"-15T12:00:00").toLocaleDateString("fr-FR",{month:"short",year:"2-digit"}); };
+    var cv=$("tresoChart");
+    if(cv && typeof Chart!=="undefined"){
+    if(tresoChartInstance) tresoChartInstance.destroy();
+    tresoChartInstance=new Chart(cv.getContext("2d"), { type:"bar",
+      data:{ labels:mois.map(etiquette), datasets:[
+        { label:"Encaissé", data:mois.map(function(m){ return arr2(entrees[m]); }), backgroundColor:"#1aa058" },
+        { label:"Dépenses + achats payés", data:mois.map(function(m){ return arr2(sorties[m]); }), backgroundColor:"#ee2028" },
+        { label:"Solde", type:"line", data:mois.map(function(m){ return arr2(entrees[m]-sorties[m]); }), borderColor:"#1F2B45", backgroundColor:"#1F2B45", tension:.3 } ] },
+      options:{ responsive:true, plugins:{ legend:{ position:"bottom" } }, scales:{ y:{ beginAtZero:true } } } });
+    }
+    var aEnc=factures().reduce(function(s,d){ return s+resteDoc(d); },0);
+    var el=$("dashGestion"); if(!el) return;
+    var retards=orders.filter(function(o){ return retardCommande(o)>0; }), relances=prospects.filter(relanceDue), facRet=factures().filter(function(d){ return factureEnRetard(d)>0; });
+    var li=function(t){ return '<div class="item-row" style="border-bottom:1px solid var(--line);padding:6px 0;">'+t+'</div>'; };
+    var urgences=facRet.map(function(d){ return li('💰 <b>'+esc(d.numero)+'</b> · '+esc(d.clientName||"")+' · reste '+nf(resteDoc(d))+' MAD · <span style="color:var(--danger);">'+factureEnRetard(d)+' j</span>'); }).join("")
+      +retards.map(function(o){ var c=clients.find(function(x){ return String(x.id)===String(o.clientId); })||{}; return li('🏭 <b>'+esc(c.name||"")+'</b> · '+esc(o.title||"")+' · <span style="color:var(--danger);">livraison dépassée de '+retardCommande(o)+' j</span>'); }).join("")
+      +relances.map(function(p){ return li('🎯 Relancer <b>'+esc(p.entreprise||p.nom||"")+'</b>'+(p.telephone?' · '+esc(p.telephone):'')); }).join("");
+    el.innerHTML='<div class="hint" style="margin-bottom:6px;">Reste à encaisser : <b>'+nf(aEnc)+' MAD</b></div>'+(urgences || '<div class="hint">Rien d\'urgent 👍</div>');
+  }
+
+  // ===================== RELANCES, AGENDA, COMPTES UTILISATEURS, RAPPORTS =====================
+  var appNom="";
+  var signature=function(){ return (invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC"; };
+  var clientDe=function(id){ return clients.find(function(c){ return String(c.id)===String(id); })||{}; };
+  var dernierSuivi=function(d){ var r=(d.suivi&&d.suivi.relances)||[]; return r.length ? r[r.length-1].at : null; };
+  var joursDepuisIso=function(iso){ return iso ? (Date.now()-new Date(iso).getTime())/864e5 : null; };
+  function ajouterJours(n){ var d=new Date(); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); }
+
+  // ---------- 1) Relances du jour ----------
+  function relancesDuJour(){
+    var out=[];
+    documents.forEach(function(d){
+      var der=dernierSuivi(d), recent=der!=null && joursDepuisIso(der)<3, nb=((d.suivi&&d.suivi.relances)||[]).length;
+      if(d.type==="DEVIS" && d.statutDevis==="En attente" && joursDepuisIso(d.date)>=3 && !recent)
+        out.push({ type:"devis", cle:d.id, doc:d, titre:"📄 Devis "+d.numero+" — "+(d.clientName||""), sous:"envoyé il y a "+Math.floor(joursDepuisIso(d.date))+" j · "+nf(d.totalTTC)+" "+(d.currency||"MAD")+(nb?" · déjà relancé "+nb+" fois":""), tel:d.clientPhone||clientDe(d.clientId).phone });
+      if(d.type==="FACTURE" && resteDoc(d)>0.009 && !recent){
+        var proche = d.echeance ? joursDepuis(d.echeance)>=-1 : factureEnRetard(d)>0;
+        if(proche) out.push({ type:"facture", cle:d.id, doc:d, titre:"💰 Facture "+d.numero+" — "+(d.clientName||""), sous:"reste "+nf(resteDoc(d))+" "+(d.currency||"MAD")+(d.echeance?" · échéance "+dateCourte(d.echeance):" · émise il y a "+daysSince(d.date)+" j"), tel:d.clientPhone||clientDe(d.clientId).phone });
+      }
+    });
+    prospects.filter(relanceDue).forEach(function(p){ out.push({ type:"prospect", cle:p.id, pro:p, titre:"🎯 "+(p.entreprise||p.nom||"Prospect"), sous:nomEtapePro(p.etape)+(p.besoin?" · "+String(p.besoin).slice(0,50):""), tel:p.telephone }); });
+    orders.forEach(function(o){
+      var pr=prodCommande(o), livre=pr.etapes.livre || (o.status==="Terminé" ? ((o.statusHistory||[]).slice().reverse().find(function(h){ return h.status==="Terminé"; })||{}).at : null);
+      if(!livre || (o.production&&o.production.avisDemande) || joursDepuisIso(livre)>30) return;
+      var c=clientDe(o.clientId);
+      out.push({ type:"avis", cle:o.id, cmd:o, titre:"⭐ Remercier "+(c.name||"le client")+" et demander un avis", sous:(o.title||"commande")+" · livrée le "+dateCourte(livre), tel:c.phone });
+    });
+    return out;
+  }
+  function messageRelance(r){
+    if(r.type==="devis"){ var d=r.doc, c=clientDe(d.clientId), ap=(d.files||[]).filter(function(f){ return /^Apercu/i.test(f.name||""); }).pop();
+      return "Bonjour "+(c.contactPerson||d.clientName||"")+",\n\nJe reviens vers vous au sujet de notre devis "+d.numero+" ("+nf(d.totalTTC)+" "+(d.currency||"MAD")+" TTC). Avez-vous pu le consulter ?\nNous pouvons l'ajuster si besoin (quantité, couleurs, modèle)."
+        +(ap?"\n\n📷 Aperçu de votre sac : "+ap.url:"")+"\n\n"+signature(); }
+    if(r.type==="facture"){ var f=r.doc, cf=clientDe(f.clientId);
+      return "Bonjour "+(cf.contactPerson||f.clientName||"")+",\n\nSauf erreur de notre part, il reste "+nf(resteDoc(f))+" "+(f.currency||"MAD")+" à régler sur la facture "+f.numero+(f.echeance?" (échéance le "+dateCourte(f.echeance)+")":"")+".\n\nMerci de nous indiquer la date de règlement.\n\n"+signature(); }
+    if(r.type==="prospect"){ var p=r.pro;
+      return "Bonjour "+(p.nom||"")+",\n\nC'est "+signature()+", suite à votre demande de sacs personnalisés"+(p.besoin?" ("+p.besoin+")":"")+". Avez-vous pu avancer sur votre projet ? Nous pouvons vous envoyer un devis et un aperçu 3D gratuit de votre sac.\n\n"+signature(); }
+    var c2=clientDe(r.cmd.clientId), lien=(invoiceSettings&&invoiceSettings.lienAvisGoogle)||"";
+    return "Bonjour "+(c2.contactPerson||c2.name||"")+",\n\nMerci pour votre commande ! Nous espérons que vos sacs vous plaisent."
+      +(lien ? "\n\nSi vous êtes satisfait, un petit avis Google nous aiderait beaucoup ⭐ :\n"+lien : "\n\nN'hésitez pas à nous recommander autour de vous 🙏")+"\n\nÀ bientôt,\n"+signature();
+  }
+  function noterRelanceFaite(r){
+    if(r.type==="devis"||r.type==="facture") return api({ action:"noterSuivi", id:r.cle });
+    if(r.type==="prospect") return api({ action:"saveProspect", prospect:Object.assign({}, r.pro, { relanceLe:ajouterJours(3), notes:((r.pro.notes||"")+"\nRelancé le "+dateCourte(aujourdhui())).trim() }) });
+    var pr=prodCommande(r.cmd); return api({ action:"saveOrder", order:{ id:r.cmd.id, production:{ etapes:pr.etapes, notes:pr.notes, avisDemande:new Date().toISOString() } } });
+  }
+  function renderRelanceList(){
+    var el=$("listScroll"), liste=relancesDuJour(), groupes=[["devis","📄 Devis sans réponse"],["facture","💰 Paiements à relancer"],["prospect","🎯 Prospects à relancer"],["avis","⭐ Remerciement + avis Google"]];
+    var h='<div class="summary-bar">'+(liste.length ? liste.length+" relance(s) à faire aujourd'hui" : "Aucune relance aujourd'hui 👍")+'</div>';
+    if(!(invoiceSettings&&invoiceSettings.lienAvisGoogle) && liste.some(function(r){ return r.type==="avis"; })) h+='<div class="hint" style="padding:0 6px 8px;">Ajoutez le lien de votre fiche Google (🏢 Paramètres → « Lien d\'avis Google ») pour l\'inclure dans le message.</div>';
+    groupes.forEach(function(g){
+      var grp=liste.filter(function(r){ return r.type===g[0]; }); if(!grp.length) return;
+      h+='<div class="hint" style="margin:12px 4px 4px;font-weight:700;">'+g[1]+' ('+grp.length+')</div>';
+      grp.forEach(function(r, i){
+        h+='<div class="row-card" data-rel="'+esc(r.type+":"+r.cle)+'"><div class="name">'+esc(r.titre)+'</div><div class="meta"><span>'+esc(r.sous)+'</span></div>'
+          +'<div class="item-row" style="gap:6px;margin-top:6px;">'+(r.tel?'<button type="button" class="btn btn-gold btn-sm" data-rel-wa="'+esc(r.type+":"+r.cle)+'">💬 WhatsApp</button>':'<span class="hint">pas de téléphone</span>')
+          +'<button type="button" class="btn btn-ghost btn-sm" data-rel-fait="'+esc(r.type+":"+r.cle)+'" data-mut="1">✓ Fait</button></div></div>';
+      });
+    });
+    el.innerHTML=h;
+    var trouver=function(k){ return liste.find(function(r){ return r.type+":"+r.cle===k; }); };
+    Array.prototype.forEach.call(el.querySelectorAll("[data-rel-wa]"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); var r=trouver(b.getAttribute("data-rel-wa")); if(!r) return;
+      openWhatsapp(r.tel, messageRelance(r)); noterRelanceFaite(r).then(function(){ toast("Relance notée"); refresh(); }).catch(function(er){ toast("Échec : "+er.message); }); }); });
+    Array.prototype.forEach.call(el.querySelectorAll("[data-rel-fait]"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); var r=trouver(b.getAttribute("data-rel-fait")); if(!r) return;
+      b.disabled=true; noterRelanceFaite(r).then(function(){ toast("Noté"); refresh(); }).catch(function(er){ toast("Échec : "+er.message); b.disabled=false; }); }); });
+    Array.prototype.forEach.call(el.querySelectorAll("[data-rel]"), function(card){ card.addEventListener("click", function(){ var r=trouver(card.getAttribute("data-rel")); if(!r) return;
+      currentId.relances=card.getAttribute("data-rel"); renderRelanceDetail(r); }); });
+  }
+  function renderRelanceDetail(r){
+    if(!r){ $("colDetail").innerHTML='<div class="placeholder">Les relances sont préparées chaque jour :<br>devis sans réponse depuis 3 jours, factures à échéance,<br>prospects à relancer, clients livrés à remercier.</div>'; return; }
+    $("colDetail").innerHTML='<div class="detail-inner"><div class="head-block"><div><h2>'+esc(r.titre)+'</h2><div class="sub">'+esc(r.sous)+'</div></div></div>'
+      +'<div class="section-head"><h3>Message préparé</h3></div><textarea id="relMsg" rows="10" style="width:100%;">'+esc(messageRelance(r))+'</textarea>'
+      +'<div class="item-row" style="gap:6px;margin-top:8px;">'+(r.tel?'<button type="button" class="btn btn-gold btn-sm" id="relEnvoyer">💬 Envoyer sur WhatsApp</button>':'')
+      +'<button type="button" class="btn btn-ghost btn-sm" id="relOuvrir">Ouvrir la fiche</button></div></div>';
+    if($("relEnvoyer")) $("relEnvoyer").addEventListener("click", function(){ openWhatsapp(r.tel, $("relMsg").value); noterRelanceFaite(r).then(function(){ toast("Relance notée"); refresh(); }); });
+    $("relOuvrir").addEventListener("click", function(){
+      if(r.type==="devis"){ currentId.quotes=r.cle; setTab("quotes"); }
+      else if(r.type==="facture"){ currentId.invoices=r.cle; setTab("invoices"); }
+      else if(r.type==="prospect"){ currentId.prospects=r.cle; setTab("prospects"); }
+      else goToOrder(r.cmd);
+    });
+  }
+  function majCompteurRelances(){ var b=$("tabRelances"); if(b) b.textContent="🔔 Relances"+(function(){ var n=relancesDuJour().length; return n ? " ("+n+")" : ""; })(); }
+
+  // ---------- 2) Agenda ----------
+  var moisAgenda=aujourdhui().slice(0,7), jourAgenda=aujourdhui();
+  function evenementsAgenda(){
+    var ev=[];
+    orders.filter(commandeActive).forEach(function(o){ if(o.dateLivraison && !etapeFaite(o,"livre")) ev.push({ jour:String(o.dateLivraison).slice(0,10), icone:"🚚", texte:"Livraison : "+(clientDe(o.clientId).name||"")+" · "+(o.title||""), couleur:"#1F2B45", ouvrir:function(){ goToOrder(o); } }); });
+    documents.forEach(function(d){ if(d.type==="FACTURE" && d.echeance && resteDoc(d)>0.009) ev.push({ jour:String(d.echeance).slice(0,10), icone:"💰", texte:"Échéance "+d.numero+" · "+(d.clientName||"")+" · reste "+nf(resteDoc(d)), couleur:"#b07a10", ouvrir:function(){ currentId.invoices=d.id; setTab("invoices"); } }); });
+    prospects.forEach(function(p){ if(p.relanceLe && p.etape!=="gagne" && p.etape!=="perdu") ev.push({ jour:String(p.relanceLe).slice(0,10), icone:"🎯", texte:"Relancer "+(p.entreprise||p.nom||""), couleur:"#7a3fb0", ouvrir:function(){ currentId.prospects=p.id; setTab("prospects"); } }); });
+    rappels.forEach(function(r){ if(!r.done && r.dueDate) ev.push({ jour:String(r.dueDate).slice(0,10), icone:r.type==="rdv"?"📅":"📌", texte:(r.heure?r.heure+" · ":"")+(r.title||""), couleur:r.type==="rdv"?"#1aa058":"#555", rappel:r }); });
+    return ev.sort(function(a,b){ return (a.jour+(a.rappel&&a.rappel.heure||"")).localeCompare(b.jour+(b.rappel&&b.rappel.heure||"")); });
+  }
+  function renderAgendaList(){
+    var el=$("listScroll"), ev=evenementsAgenda(), auj=aujourdhui(), fin=ajouterJours(30);
+    var retard=ev.filter(function(e){ return e.jour<auj; }), avenir=ev.filter(function(e){ return e.jour>=auj && e.jour<=fin; });
+    var h='<div class="summary-bar">'+avenir.length+' événement(s) dans les 30 jours'+(retard.length?' · <b style="color:var(--danger);">'+retard.length+' en retard</b>':'')+'</div>';
+    var ligne=function(e, i){ return '<div class="row-card" data-ev="'+i+'"><div class="name">'+e.icone+' '+esc(e.texte)+'</div></div>'; };
+    var tout=retard.concat(avenir);
+    if(retard.length) h+='<div class="hint" style="margin:10px 4px 4px;font-weight:700;color:var(--danger);">En retard</div>'+retard.map(function(e){ return ligne(e, tout.indexOf(e)); }).join("");
+    var parJour={}; avenir.forEach(function(e){ (parJour[e.jour]=parJour[e.jour]||[]).push(e); });
+    Object.keys(parJour).sort().forEach(function(j){ h+='<div class="hint" style="margin:10px 4px 4px;font-weight:700;">'+(j===auj?"Aujourd'hui":dateCourte(j))+'</div>'+parJour[j].map(function(e){ return ligne(e, tout.indexOf(e)); }).join(""); });
+    if(!tout.length) h+='<div class="empty-hint">Rien de prévu.<br>Ajoutez un rendez-vous avec « + Rendez-vous ».</div>';
+    el.innerHTML=h;
+    Array.prototype.forEach.call(el.querySelectorAll("[data-ev]"), function(card){ card.addEventListener("click", function(){ var e=tout[Number(card.getAttribute("data-ev"))]; if(e.ouvrir) e.ouvrir(); else { jourAgenda=e.jour; moisAgenda=e.jour.slice(0,7); renderAgendaDetail(); } }); });
+  }
+  function renderAgendaDetail(){
+    var ev=evenementsAgenda(), parJour={}; ev.forEach(function(e){ (parJour[e.jour]=parJour[e.jour]||[]).push(e); });
+    var a=Number(moisAgenda.slice(0,4)), m=Number(moisAgenda.slice(5,7))-1, premier=new Date(a, m, 1), nbJ=new Date(a, m+1, 0).getDate(), decal=(premier.getDay()+6)%7;
+    var titre=premier.toLocaleDateString("fr-FR",{month:"long",year:"numeric"}), auj=aujourdhui();
+    var h='<div class="detail-inner"><div class="head-block"><div><h2>📅 '+esc(titre.charAt(0).toUpperCase()+titre.slice(1))+'</h2></div><div class="head-actions">'
+      +'<button class="icon-btn" id="agPrec" title="Mois précédent">◀</button><button class="icon-btn" id="agAuj" title="Aujourd\'hui">●</button><button class="icon-btn" id="agSuiv" title="Mois suivant">▶</button></div></div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;font-size:12px;">'+["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(function(j){ return '<div class="hint" style="text-align:center;font-weight:700;">'+j+'</div>'; }).join("");
+    for(var i=0;i<decal;i++) h+='<div></div>';
+    for(var j=1;j<=nbJ;j++){
+      var cle=moisAgenda+"-"+("0"+j).slice(-2), lst=parJour[cle]||[];
+      h+='<div data-jour="'+cle+'" style="min-width:0;overflow:hidden;min-height:64px;border:1px solid '+(cle===jourAgenda?'var(--navy)':'var(--line)')+';border-radius:8px;padding:4px;cursor:pointer;background:'+(cle===auj?'rgba(31,43,69,.06)':'transparent')+';">'
+        +'<div style="font-weight:700;">'+j+'</div>'+lst.slice(0,3).map(function(e){ return '<div style="font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:'+e.couleur+';">'+e.icone+' '+esc(e.texte)+'</div>'; }).join("")
+        +(lst.length>3?'<div class="hint" style="font-size:10px;">+'+(lst.length-3)+'</div>':'')+'</div>';
+    }
+    h+='</div><div class="section-head"><h3>'+(jourAgenda===auj?"Aujourd'hui":dateCourte(jourAgenda))+'</h3><button type="button" class="btn btn-primary btn-sm" id="agRdv" data-mut="1">+ Rendez-vous ce jour</button></div>';
+    var duJour=parJour[jourAgenda]||[];
+    h+=duJour.map(function(e, k){ return '<div class="item-row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:7px 0;"><span style="cursor:pointer;" data-agj="'+k+'">'+e.icone+' '+esc(e.texte)+(e.rappel&&e.rappel.notes?' <span class="hint">· '+esc(e.rappel.notes)+'</span>':'')+'</span>'
+      +(e.rappel?'<button type="button" class="btn btn-ghost btn-sm" data-agfait="'+k+'" data-mut="1">✓ Fait</button>':'')+'</div>'; }).join("") || '<div class="hint">Rien ce jour-là.</div>';
+    $("colDetail").innerHTML=h+'</div>';
+    var changer=function(n){ var d=new Date(a, m+n, 1); moisAgenda=d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2); renderAgendaDetail(); };
+    $("agPrec").addEventListener("click", function(){ changer(-1); }); $("agSuiv").addEventListener("click", function(){ changer(1); });
+    $("agAuj").addEventListener("click", function(){ moisAgenda=auj.slice(0,7); jourAgenda=auj; renderAgendaDetail(); });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll("[data-jour]"), function(c){ c.addEventListener("click", function(){ jourAgenda=c.getAttribute("data-jour"); renderAgendaDetail(); }); });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll("[data-agj]"), function(s){ s.addEventListener("click", function(){ var e=duJour[Number(s.getAttribute("data-agj"))]; if(e.ouvrir) e.ouvrir(); }); });
+    Array.prototype.forEach.call($("colDetail").querySelectorAll("[data-agfait]"), function(b){ b.addEventListener("click", function(){ var e=duJour[Number(b.getAttribute("data-agfait"))];
+      api({ action:"saveRappel", rappel:Object.assign({}, e.rappel, { done:true }) }).then(function(){ toast("Terminé"); refresh(); }).catch(function(er){ toast("Échec : "+er.message); }); }); });
+    $("agRdv").addEventListener("click", function(){ openRdvModal(jourAgenda); });
+  }
+  function openRdvModal(jour){
+    modaleGestion("Nouveau rendez-vous",
+      champ("Objet *",'<input name="title" required placeholder="Ex : Visite Pharmacie Benjelloun, livraison fournisseur non tissé…">')
+      +'<div class="field-row">'+champ("Date *",'<input type="date" name="dueDate" required value="'+esc(jour||aujourdhui())+'">')+champ("Heure",'<input type="time" name="heure">')+'</div>'
+      +champ("Lieu / notes",'<textarea name="notes" rows="2"></textarea>'),
+      function(form){ var v=valeurs(form); return api({ action:"saveRappel", rappel:{ title:v.title, dueDate:v.dueDate, heure:v.heure, notes:v.notes, type:"rdv", done:false } })
+        .then(function(){ jourAgenda=v.dueDate; moisAgenda=v.dueDate.slice(0,7); toast("Rendez-vous ajouté"); refresh(); }); });
+  }
+
+  // ---------- 3) Comptes utilisateurs, droits, journal ----------
+  var NOMS_ROLES={ admin:"Administrateur (tout)", commercial:"Commercial (clients, devis, factures — sans dépenses ni paramètres)", atelier:"Atelier (commandes, fabrication, BAT — sans prix ni factures)", lecture:"Lecture seule" };
+  function appliquerDroitsUI(){
+    var cacher=function(ids, oui){ ids.forEach(function(id){ var e=$(id); if(e) e.style.display = oui ? "none" : ""; }); };
+    cacher(["tabQuotes","tabInvoices","tabProspects","tabDepenses","tabSuppliers","tabRelances","dashBtn","exportAllBtn"], appRole==="atelier");
+    if(appRole!=="atelier") cacher(["tabDepenses"], appRole==="commercial");
+    cacher(["companyBtn","usersBtn"], appRole!=="admin");
+    var tag=$("roleTag");
+    if(appNom && appRole!=="lecture"){ tag.style.display="inline-block"; tag.textContent="👤 "+appNom; }
+    if(appRole==="atelier" && ["quotes","invoices","prospects","depenses","suppliers","relances"].indexOf(activeTab)!==-1) setTab("atelier");
+  }
+  var LIBELLES_ACTIONS={ connexion:"s'est connecté(e)", saveClient:"client enregistré", deleteClient:"client supprimé", saveOrder:"commande / fabrication", deleteOrder:"commande supprimée",
+    saveProduct:"produit enregistré", deleteProduct:"produit supprimé", saveSupplier:"fournisseur enregistré", deleteSupplier:"fournisseur supprimé", genererDevis:"devis créé", genererDocument:"document créé (BC / BL / facture)",
+    updateDocument:"document modifié", deleteDocument:"document supprimé", updateDevisStatut:"statut du devis", convertirDevis:"devis converti en commande", genererAvoir:"avoir créé",
+    savePaiements:"paiement enregistré", updateDocumentPaiement:"statut de paiement", noterSuivi:"relance faite", saveProspect:"prospect", deleteProspect:"prospect supprimé",
+    saveDepense:"dépense", deleteDepense:"dépense supprimée", saveBat:"BAT", deleteBat:"BAT supprimé", saveRappel:"rappel / rendez-vous", deleteRappel:"rappel supprimé",
+    saveAchat:"achat fournisseur", deleteAchat:"achat supprimé", saveTarif:"tarif négocié", deleteTarif:"tarif supprimé", ajusterStock:"stock ajusté", uploadFile:"fichier envoyé",
+    joindreFichierDocument:"fichier joint", genererEtiquette:"étiquette d'envoi", saveSettings:"paramètres modifiés", setCompteur:"compteur de factures", saveUtilisateur:"compte utilisateur",
+    importerFacture:"facture importée", sauvegardeComplete:"sauvegarde téléchargée", restaurerLignes:"restauration de sauvegarde", saveTransporteur:"transporteur", demandeWeb:"demande du site" };
+  function ouvrirComptes(){
+    var ov=document.createElement("div"); ov.className="overlay open";
+    ov.innerHTML='<div class="modal" style="max-width:760px;"><h3>👥 Utilisateurs et journal</h3>'
+      +'<div class="item-row" style="gap:6px;margin-bottom:10px;"><button type="button" class="btn btn-primary btn-sm" id="cmpOngletU">Comptes</button><button type="button" class="btn btn-ghost btn-sm" id="cmpOngletJ">🕵 Journal (qui a fait quoi)</button></div>'
+      +'<div id="cmpCorps"><div class="hint">Chargement…</div></div><div class="modal-actions"><button type="button" class="btn btn-ghost" id="cmpFermer">Fermer</button></div></div>';
+    document.body.appendChild(ov);
+    var fermer=function(){ ov.remove(); }; $("cmpFermer").addEventListener("click", fermer);
+    function comptes(){
+      $("cmpOngletU").className="btn btn-primary btn-sm"; $("cmpOngletJ").className="btn btn-ghost btn-sm";
+      api({ action:"listUtilisateurs" }).then(function(r){
+        var h='<div class="hint" style="margin-bottom:8px;">Chaque personne se connecte avec <b>son identifiant et son mot de passe</b> (écran de connexion → « Identifiant »). Votre clé d\'accès reste valable (propriétaire).</div>';
+        h+=r.utilisateurs.map(function(u){ return '<div class="item-row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:7px 0;'+(u.actif===false?'opacity:.5;':'')+'"><span><b>'+esc(u.nom)+'</b> · '+esc(u.identifiant)+' · '+esc((NOMS_ROLES[u.role]||u.role).split(" (")[0])+(u.actif===false?' · désactivé':'')
+          +'<br><span class="hint">dernière connexion : '+(u.dernier_acces?fmtDate(u.dernier_acces):"jamais")+'</span></span><button type="button" class="btn btn-ghost btn-sm" data-cmp="'+esc(u.id)+'">Modifier</button></div>'; }).join("")
+          || '<div class="hint">Aucun compte pour l\'instant.</div>';
+        h+='<div style="margin-top:10px;"><button type="button" class="btn btn-primary btn-sm" id="cmpNouveau">+ Nouveau compte</button></div>';
+        $("cmpCorps").innerHTML=h;
+        $("cmpNouveau").addEventListener("click", function(){ formCompte(null); });
+        Array.prototype.forEach.call($("cmpCorps").querySelectorAll("[data-cmp]"), function(b){ b.addEventListener("click", function(){ formCompte(r.utilisateurs.find(function(u){ return u.id===b.getAttribute("data-cmp"); })); }); });
+      }).catch(function(e){ $("cmpCorps").innerHTML='<div class="hint" style="color:var(--danger);">'+esc(e.message)+'</div>'; });
+    }
+    function formCompte(u){
+      u=u||{ role:"commercial", actif:true };
+      modaleGestion(u.id ? "Modifier le compte" : "Nouveau compte",
+        '<div class="field-row">'+champ("Nom affiché *",'<input name="nom" required value="'+esc(u.nom||"")+'" placeholder="Ex : Karim (atelier)">')+champ("Identifiant de connexion *",'<input name="identifiant" required value="'+esc(u.identifiant||"")+'" placeholder="karim" autocomplete="off">')+'</div>'
+        +champ("Profil",'<select name="role">'+options(Object.keys(NOMS_ROLES).map(function(k){ return [k, NOMS_ROLES[k]]; }), u.role)+'</select>')
+        +champ(u.id ? "Nouveau mot de passe <span class=\"hint\">(laisser vide pour ne pas changer)</span>" : "Mot de passe * <span class=\"hint\">(8 caractères minimum)</span>",'<input name="motDePasse" type="password" autocomplete="new-password"'+(u.id?'':' required minlength="8"')+'>')
+        +(u.id ? '<label style="display:flex;gap:6px;align-items:center;margin:6px 0;"><input type="checkbox" name="actif"'+(u.actif!==false?' checked':'')+'> Compte actif (décocher pour bloquer l\'accès immédiatement)</label>' : ''),
+        function(form){ var v=valeurs(form); var obj={ id:u.id, nom:v.nom, identifiant:v.identifiant, role:v.role, motDePasse:v.motDePasse||"", actif:u.id ? v.actif : true };
+          return api({ action:"saveUtilisateur", utilisateur:obj }).then(function(){ toast("Compte enregistré"); comptes(); }); });
+    }
+    function journal(){
+      $("cmpOngletJ").className="btn btn-primary btn-sm"; $("cmpOngletU").className="btn btn-ghost btn-sm";
+      api({ action:"lireJournal", limite:400 }).then(function(r){
+        var noms={}; r.journal.forEach(function(j){ noms[j.utilisateur]=1; });
+        var h='<div class="field" style="max-width:260px;"><select id="jrnFiltre"><option value="">Tout le monde</option>'+Object.keys(noms).map(function(n){ return '<option>'+esc(n)+'</option>'; }).join("")+'</select></div><div id="jrnListe" style="max-height:50vh;overflow:auto;"></div>';
+        $("cmpCorps").innerHTML=h;
+        var afficher=function(){ var f=$("jrnFiltre").value; $("jrnListe").innerHTML=r.journal.filter(function(j){ return !f || j.utilisateur===f; }).map(function(j){
+          return '<div style="border-bottom:1px solid var(--line);padding:5px 0;font-size:12.5px;"><b>'+esc(j.utilisateur)+'</b> · '+esc(LIBELLES_ACTIONS[j.action]||j.action)+(j.resume?' · '+esc(j.resume):'')+'<span class="hint" style="float:right;">'+fmtDate(j.at)+'</span></div>'; }).join("") || '<div class="hint">Aucune action enregistrée.</div>'; };
+        $("jrnFiltre").addEventListener("change", afficher); afficher();
+      }).catch(function(e){ $("cmpCorps").innerHTML='<div class="hint" style="color:var(--danger);">'+esc(e.message)+'</div>'; });
+    }
+    $("cmpOngletU").addEventListener("click", comptes); $("cmpOngletJ").addEventListener("click", journal);
+    comptes();
+  }
+
+  // ---------- 4) Rapport mensuel et export comptable ----------
+  function periodeChoisie(titre, suite){
+    modaleGestion(titre, '<div class="field-row">'+champ("Mois",'<input type="month" name="mois" value="'+moisDecale(-1)+'">')+'</div><label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" name="annee"> Toute l\'année de ce mois</label>',
+      function(form){ var v=valeurs(form); if(!v.mois){ toast("Choisissez un mois"); return false; } suite(v.annee ? v.mois.slice(0,4) : v.mois); });
+  }
+  var dansPeriode=function(jour, p){ return String(jour||"").slice(0, p.length)===p; };
+  function libellePeriode(p){ return p.length===4 ? "année "+p : new Date(p+"-15T12:00:00").toLocaleDateString("fr-FR",{month:"long",year:"numeric"}); }
+  function donneesPeriode(p){
+    var fac=documents.filter(function(d){ return (d.type==="FACTURE"||d.type==="AVOIR") && dansPeriode(d.date, p); }).sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
+    var sg=function(d){ return d.type==="AVOIR"?-1:1; };
+    var ht=fac.reduce(function(s,d){ return s+sg(d)*Number(d.totalHT||0); },0), tva=fac.reduce(function(s,d){ return s+sg(d)*Number(d.totalTVA||0); },0), ttc=fac.reduce(function(s,d){ return s+sg(d)*Number(d.totalTTC||0); },0);
+    var enc=[]; factures().forEach(function(d){ var pp=paiementsDoc(d);
+      if(pp.length) pp.forEach(function(x){ if(dansPeriode(x.date, p)) enc.push({ date:x.date, numero:d.numero, client:d.clientName, mode:x.mode, montant:Number(x.montant||0), note:x.note||"" }); });
+      else if(d.statutPaiement==="Payée" && dansPeriode(d.datePaiement||d.date, p)) enc.push({ date:String(d.datePaiement||d.date).slice(0,10), numero:d.numero, client:d.clientName, mode:"", montant:Number(d.totalTTC||0), note:"(sans détail)" }); });
+    var dep=depenses.filter(function(x){ return dansPeriode(x.date, p); }).sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
+    var ach=achats.filter(function(a){ return dansPeriode(a.createdAt, p); });
+    var parCat={}; dep.forEach(function(x){ parCat[x.categorie||"Autre"]=(parCat[x.categorie||"Autre"]||0)+Number(x.montant||0); });
+    var parClient={}; fac.forEach(function(d){ parClient[d.clientName||"—"]=(parClient[d.clientName||"—"]||0)+sg(d)*Number(d.totalTTC||0); });
+    var parProduit={}; fac.filter(function(d){ return d.type==="FACTURE"; }).forEach(function(d){ (d.lines||[]).forEach(function(l){ if(estSpeciale(l)) return; var k=l.designation||"—"; parProduit[k]=(parProduit[k]||0)+Number(l.total||0); }); });
+    var devis=documents.filter(function(d){ return d.type==="DEVIS" && dansPeriode(d.date, p); });
+    var cmdFact={}; fac.forEach(function(d){ if(d.orderId) cmdFact[d.orderId]=1; });
+    var marge=Object.keys(cmdFact).reduce(function(s,id){ var o=orders.find(function(x){ return String(x.id)===String(id); }); var m=o?margeCommande(o):null; return s+(m?m.marge:0); },0);
+    return { fac:fac, ht:ht, tva:tva, ttc:ttc, enc:enc, encTotal:enc.reduce(function(s,x){ return s+x.montant; },0), dep:dep, depTotal:dep.reduce(function(s,x){ return s+Number(x.montant||0); },0),
+      ach:ach, achTotal:ach.reduce(function(s,a){ return s+totalAchat(a); },0), parCat:parCat, parClient:parClient, parProduit:parProduit, devis:devis,
+      devisGagnes:devis.filter(function(d){ return d.statutDevis==="Accepté"||d.statutDevis==="Converti"; }).length, marge:marge,
+      prosG:prospects.filter(function(x){ return x.etape==="gagne" && dansPeriode(x.updatedAt, p); }).length, prosP:prospects.filter(function(x){ return x.etape==="perdu" && dansPeriode(x.updatedAt, p); }).length };
+  }
+  function rapportMensuel(p){
+    var D=donneesPeriode(p), s=invoiceSettings||{}, mt=function(n){ return nf(n)+" MAD"; };
+    var top=function(obj, n){ return Object.keys(obj).sort(function(a,b){ return obj[b]-obj[a]; }).slice(0,n).map(function(k){ return '<tr><td>'+esc(k)+'</td><td class="n">'+mt(obj[k])+'</td></tr>'; }).join("") || '<tr><td colspan="2" class="v">—</td></tr>'; };
+    var bloc=function(l,v,sous){ return '<div class="k"><div class="l">'+l+'</div><div class="v2">'+v+'</div>'+(sous?'<div class="s">'+sous+'</div>':'')+'</div>'; };
+    var html='<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Rapport '+esc(libellePeriode(p))+'</title><style>'
+      +'body{font-family:Arial,sans-serif;color:#1B1E24;margin:28px;font-size:12.5px}h1{color:#1F2B45;margin:0}h2{color:#1F2B45;font-size:15px;margin:22px 0 8px;border-bottom:2px solid #1F2B45;padding-bottom:3px}'
+      +'.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.k{border:1px solid #ddd;border-radius:8px;padding:8px}.l{color:#777;font-size:11px}.v2{font-size:16px;font-weight:700;margin-top:2px}.s{color:#777;font-size:10.5px}'
+      +'table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #eee;padding:5px 4px;text-align:left}th{background:#f4f4f4}.n{text-align:right;white-space:nowrap}.v{color:#999}.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}'
+      +'@media print{body{margin:12mm}}</style></head><body>';
+    html+='<div style="display:flex;justify-content:space-between;align-items:flex-end;"><div><h1>Rapport d\'activité — '+esc(libellePeriode(p))+'</h1><div style="color:#777;">'+esc(s.raisonSociale||"EZPAC")+(s.ice?' · ICE '+esc(s.ice):'')+'</div></div><div style="color:#777;">édité le '+dateCourte(aujourdhui())+'</div></div>';
+    html+='<div class="kpis">'+bloc("Chiffre d'affaires HT", mt(D.ht), "TTC "+mt(D.ttc))+bloc("TVA collectée", mt(D.tva))+bloc("Encaissé", mt(D.encTotal))+bloc("Reste à encaisser (total)", mt(factures().reduce(function(x,d){ return x+resteDoc(d); },0)))
+      +bloc("Dépenses", mt(D.depTotal))+bloc("Achats fournisseurs", mt(D.achTotal))+bloc("Trésorerie (encaissé − dépenses)", mt(D.encTotal-D.depTotal))+bloc("Marge estimée (commandes facturées)", mt(D.marge))
+      +bloc("Factures émises", D.fac.filter(function(d){ return d.type==="FACTURE"; }).length, D.fac.filter(function(d){ return d.type==="AVOIR"; }).length+" avoir(s)")+bloc("Devis", D.devis.length, D.devisGagnes+" transformé(s)")+bloc("Prospects gagnés / perdus", D.prosG+" / "+D.prosP)+bloc("Panier moyen", mt(D.fac.length?D.ttc/D.fac.length:0))+'</div>';
+    html+='<div class="cols"><div><h2>Meilleurs clients</h2><table>'+top(D.parClient,8)+'</table></div><div><h2>Produits les plus vendus (montant)</h2><table>'+top(D.parProduit,8)+'</table></div></div>';
+    html+='<div class="cols"><div><h2>Dépenses par catégorie</h2><table>'+top(D.parCat,12)+'</table></div><div><h2>Encaissements par mode</h2><table>'+top(D.enc.reduce(function(o,x){ o[x.mode||"Non précisé"]=(o[x.mode||"Non précisé"]||0)+x.montant; return o; },{}),8)+'</table></div></div>';
+    html+='<h2>Factures et avoirs de la période</h2><table><tr><th>Date</th><th>N°</th><th>Client</th><th class="n">HT</th><th class="n">TVA</th><th class="n">TTC</th><th class="n">Reste</th></tr>'
+      +(D.fac.map(function(d){ var sg=d.type==="AVOIR"?-1:1; return '<tr><td>'+dateCourte(d.date)+'</td><td>'+esc(d.numero)+(d.type==="AVOIR"?' (avoir)':'')+'</td><td>'+esc(d.clientName||"")+'</td><td class="n">'+nf(sg*d.totalHT)+'</td><td class="n">'+nf(sg*d.totalTVA)+'</td><td class="n">'+nf(sg*d.totalTTC)+'</td><td class="n">'+(d.type==="FACTURE"?nf(resteDoc(d)):'')+'</td></tr>'; }).join("") || '<tr><td colspan="7" class="v">Aucune facture.</td></tr>')+'</table>';
+    html+='<p style="color:#999;font-size:10.5px;margin-top:18px;">Montants calculés à partir du CRM. Marge estimée = ventes HT − prix d\'achat des produits − dépenses liées aux commandes.</p></body></html>';
+    imprimerDocumentHtml(html);
+  }
+  function exportComptable(p){
+    if(typeof XLSX==="undefined"){ toast("Export Excel indisponible (bibliothèque non chargée)"); return; }
+    var D=donneesPeriode(p), feuilles={};
+    feuilles["Journal des ventes"]=[["Date","N°","Type","Client","ICE client","Total HT","TVA","Total TTC","Encaissé","Reste","Statut"]].concat(D.fac.map(function(d){ var sg=d.type==="AVOIR"?-1:1, c=clientDe(d.clientId);
+      return [String(d.date).slice(0,10), d.numero, d.type==="AVOIR"?"Avoir":"Facture", d.clientName||"", d.clientIce||c.iceNumber||"", arr2(sg*d.totalHT), arr2(sg*d.totalTVA), arr2(sg*d.totalTTC), d.type==="FACTURE"?encaisseDoc(d):"", d.type==="FACTURE"?resteDoc(d):"", d.type==="FACTURE"?(d.statutPaiement||""):""]; }));
+    feuilles["Encaissements"]=[["Date","Facture","Client","Mode","Montant","Note"]].concat(D.enc.map(function(x){ return [String(x.date).slice(0,10), x.numero, x.client||"", x.mode||"", arr2(x.montant), x.note]; }));
+    feuilles["Dépenses"]=[["Date","Catégorie","Libellé","Fournisseur","Mode","Montant TTC","Commande liée"]].concat(D.dep.map(function(x){ var o=x.orderId?orders.find(function(c){ return String(c.id)===String(x.orderId); }):null; return [x.date, x.categorie||"", x.libelle||"", x.fournisseur||"", x.mode||"", arr2(x.montant), o?(o.title||""):""]; }));
+    feuilles["Achats fournisseurs"]=[["Date","N°","Fournisseur","Montant","Paiement"]].concat(D.ach.map(function(a){ var f=suppliers.find(function(x){ return String(x.id)===String(a.fournisseurId); })||{}; return [String(a.createdAt||"").slice(0,10), a.numero||"", f.name||"", arr2(totalAchat(a)), a.statutPaiement||""]; }));
+    feuilles["Synthèse"]=[["Période",libellePeriode(p)],["CA HT",arr2(D.ht)],["TVA collectée",arr2(D.tva)],["CA TTC",arr2(D.ttc)],["Encaissé",arr2(D.encTotal)],["Dépenses",arr2(D.depTotal)],["Achats",arr2(D.achTotal)]];
+    exportExcelFile("export-comptable-"+p+".xlsx", feuilles);
+  }
+
   // ===================== IMPORT DE FACTURES EXISTANTES =====================
   // Fichiers HTML du « modèle de facture » : toutes les données sont lues (n°, client, lignes, TVA, paiement).
   // PDF / images : joints à la facture du même numéro, ou facture saisie à la main (montant global).
@@ -3215,17 +3975,17 @@
     var q=($("searchInput").value||"").toLowerCase().trim();
     var list=documents.filter(function(d){return d.type==="FACTURE"||d.type==="AVOIR";}).filter(function(d){ if(!q) return true; return [d.numero,d.clientName].some(function(v){return v&&String(v).toLowerCase().indexOf(q)!==-1;}); });
     var totalFacture=factures().reduce(function(s,d){return s+(d.totalTTC||0);},0) - avoirs().reduce(function(s,d){return s+(d.totalTTC||0);},0);
-    var totalPaye=factures().filter(function(d){return d.statutPaiement==="Payée";}).reduce(function(s,d){return s+(d.totalTTC||0);},0);
+    var totalPaye=factures().reduce(function(s,d){return s+encaisseDoc(d);},0);
     var el=$("listScroll");
     var resume='<div class="summary-bar">Facturé net : <strong>'+nf(totalFacture)+' MAD</strong> · Encaissé : <strong>'+nf(totalPaye)+' MAD</strong> · En attente : <strong>'+nf(totalFacture-totalPaye)+' MAD</strong></div>';
     if(!list.length){ el.innerHTML=resume+'<div class="empty-hint">'+(factures().length?"Aucune facture ne correspond.":"Aucune facture pour l'instant.<br>Générez-en une depuis une commande,<br>ou ajoutez vos factures existantes avec « 📎 Ajouter des factures ».")+'</div>'; return; }
     list.sort(function(a,b){return String(b.date).localeCompare(String(a.date));});
     el.innerHTML=resume+list.map(function(d){
-      var j=daysSince(d.date); var enRetard = d.type==="FACTURE" && d.statutPaiement==="Non payée" && j!=null && j>30;
+      var j=factureEnRetard(d); var enRetard = j>0;
       return '<div class="row-card'+(d.id===currentId.invoices?" active":"")+'" data-id="'+esc(d.id)+'">'
         +'<div class="name">'+esc(d.numero)+(d.type==="AVOIR"?' <span class="pill pill-danger" style="padding:1px 6px;">AVOIR</span>':'')+(enRetard?' <span style="color:var(--danger);font-size:11px;">⚠ '+j+'j</span>':'')+'</div>'
         +'<div class="meta"><span>'+esc(d.clientName||"")+'</span><span>'+fmtDate(d.date)+'</span></div>'
-        +'<div class="price">'+nf(d.totalTTC)+' '+(d.currency||"MAD")+(d.type==="FACTURE"?' · <span class="pill '+(d.statutPaiement==="Payée"?"pill-success":"pill-danger")+'" style="margin-left:4px;">'+esc(d.statutPaiement||"")+'</span>':'')+'</div></div>';
+        +'<div class="price">'+nf(d.totalTTC)+' '+(d.currency||"MAD")+(d.type==="FACTURE"?' · '+pillPaiement(d):'')+'</div></div>';
     }).join("");
     Array.prototype.forEach.call(el.querySelectorAll(".row-card"),function(card){
       card.addEventListener("click",function(){ openRow("invoices", card.getAttribute("data-id")); });
@@ -3233,20 +3993,21 @@
   }
   function renderInvoiceDetail(d){
     var client = clients.find(function(x){return String(x.id)===String(d.clientId);});
-    var j=daysSince(d.date); var enRetard = d.type==="FACTURE" && d.statutPaiement==="Non payée" && j!=null && j>30;
+    var j=factureEnRetard(d); var enRetard = j>0;
     var h='<div class="detail-inner">';
-    h+='<div class="head-block"><div><h2>'+esc(d.numero)+(d.type==="AVOIR"?' <span class="pill pill-danger">AVOIR</span>':'')+'</h2><div class="sub">'+esc(d.clientName||"")+' · '+fmtDate(d.date)+(enRetard?' · <span style="color:var(--danger);">⚠ impayée depuis '+j+' jours</span>':'')+'</div></div>';
+    h+='<div class="head-block"><div><h2>'+esc(d.numero)+(d.type==="AVOIR"?' <span class="pill pill-danger">AVOIR</span>':'')+'</h2><div class="sub">'+esc(d.clientName||"")+' · '+fmtDate(d.date)+(enRetard?' · <span style="color:var(--danger);">'+(d.echeance?'⚠ échéance dépassée de ':'⚠ impayée depuis ')+j+' jours</span>':'')+'</div></div>';
     h+='<div class="head-actions"><button class="icon-btn" id="editInvBtn" title="Modifier" data-mut="1">✎</button><button class="icon-btn" id="xlsInvBtn" title="Exporter en Excel">📊</button><button class="icon-btn" id="pdfInvBtn" title="Télécharger en PDF">⬇</button><button class="icon-btn" id="waInvBtn" title="Envoyer par WhatsApp">💬</button><button class="icon-btn" id="printInvBtn" title="Imprimer">🖨</button><button class="icon-btn" id="delInvBtn" title="Supprimer" data-mut="1">🗑</button></div></div>';
     h+='<div class="info-grid">';
     h+='<div class="info-item"><div class="lbl">Total HT</div><div class="val">'+nf(d.totalHT)+' '+(d.currency||"MAD")+'</div></div>';
     h+='<div class="info-item"><div class="lbl">TVA ('+(d.tvaRate||0)+'%)</div><div class="val">'+nf(d.totalTVA)+' '+(d.currency||"MAD")+'</div></div>';
     h+='<div class="info-item"><div class="lbl">Total TTC</div><div class="val"><strong>'+nf(d.totalTTC)+' '+(d.currency||"MAD")+'</strong></div></div>';
-    if(d.type==="FACTURE") h+='<div class="info-item"><div class="lbl">Statut</div><div class="val"><select id="invStatut" class="sel" data-mut="1"><option'+(d.statutPaiement==="Non payée"?" selected":"")+'>Non payée</option><option'+(d.statutPaiement==="Payée"?" selected":"")+'>Payée</option></select></div></div>';
+    if(d.type==="FACTURE") h+='<div class="info-item"><div class="lbl">Paiement</div><div class="val">'+pillPaiement(d)+(d.echeance?'<div class="hint">échéance '+dateCourte(d.echeance)+'</div>':'')+'</div></div>';
     else h+='<div class="info-item"><div class="lbl">Facture d\'origine</div><div class="val">'+(d.notes?esc(d.notes):'—')+'</div></div>';
     h+='</div>';
     if(enRetard && client && client.email){
       h+='<div class="notes-block" style="border-color:var(--danger);"><strong>Facture en retard.</strong> <a href="mailto:'+esc(client.email)+'?subject='+encodeURIComponent("Relance — Facture "+d.numero)+'&body='+encodeURIComponent("Bonjour,\n\nSauf erreur de notre part, la facture "+d.numero+" du "+ (new Date(d.date)).toLocaleDateString("fr-FR") +" d'un montant de "+d.totalTTC+" "+(d.currency||"MAD")+" reste impayée à ce jour.\n\nMerci de bien vouloir régulariser dans les meilleurs délais.\n\nCordialement.")+'" style="color:var(--navy);font-weight:700;">📧 Envoyer une relance par email</a></div>';
     }
+    if(d.type==="FACTURE") h+=htmlPaiements(d);
     var fichiersDoc = Array.isArray(d.files) ? d.files : [];
     h+='<div class="section-head"><h3>📎 Fichiers ('+fichiersDoc.length+')</h3></div>';
     h+=fichiersDoc.map(function(f){ return '<div class="doc-fichier">📄 <a href="'+esc(f.url)+'" target="_blank" rel="noopener">'+esc(f.name||"fichier")+'</a>'
@@ -3267,6 +4028,7 @@
     $("editInvBtn").addEventListener("click", function(){ openDocumentEditModal(d); });
     $("delInvBtn").addEventListener("click", function(){ supprimerDocument(d, "invoices"); });
     $("xlsInvBtn").addEventListener("click", function(){ exportDocumentExcel(d); });
+    if(d.type==="FACTURE") cablerPaiements(d);
     $("invJoindre").addEventListener("click", async function(){
       var fi=$("invFichier"); if(!fi.files||!fi.files.length){ toast("Choisissez d'abord un fichier"); return; }
       var btn=this; btn.disabled=true; btn.textContent="Envoi…"; var ok=0;
@@ -4567,6 +5329,20 @@
       var tr=transporteurs.find(function(x){return String(x.id)===String(currentId.carriers);});
       if(!tr){ $("colDetail").innerHTML='<div class="placeholder">Transporteur introuvable.</div>'; return; }
       renderCarrierDetail(tr);
+    } else if(activeTab==="relances"){
+      renderRelanceDetail(currentId.relances ? relancesDuJour().find(function(r){ return r.type+":"+r.cle===currentId.relances; }) : null);
+    } else if(activeTab==="agenda"){
+      renderAgendaDetail();
+    } else if(activeTab==="atelier"){
+      renderAtelierDetail();
+    } else if(activeTab==="prospects"){
+      var pr=currentId.prospects ? prospects.find(function(x){return String(x.id)===String(currentId.prospects);}) : null;
+      if(!pr){ $("colDetail").innerHTML='<div class="placeholder">Sélectionnez un prospect<br>ou ajoutez-en un.</div>'; return; }
+      renderProspectDetail(pr);
+    } else if(activeTab==="depenses"){
+      var dp=currentId.depenses ? depenses.find(function(x){return String(x.id)===String(currentId.depenses);}) : null;
+      if(!dp){ $("colDetail").innerHTML='<div class="placeholder">Sélectionnez une dépense<br>ou ajoutez-en une.</div>'; return; }
+      renderDepenseDetail(dp);
     } else if(activeTab==="bats"){
       if(!currentId.bats){ $("colDetail").innerHTML='<div class="placeholder">Sélectionnez un BAT<br>ou créez-en un nouveau.</div>'; return; }
       var bt=bats.find(function(x){return String(x.id)===String(currentId.bats);});
@@ -4613,6 +5389,7 @@
     return "Bonjour "+(d.clientName||"")+",\n\nVotre devis est "+d.numero+" :\n\n"+lignes
       +((d.lines||[]).some(function(l){ return l.type==="remise" && l.remise && l.remise.motif==="premier"; }) ? "\n\n🎁 Remise de bienvenue pour votre premier achat !" : "")
       +(d.notesClient?"\n\n📝 "+d.notesClient:"")
+      +(function(){ var ap=(d.files||[]).filter(function(f){ return /^Apercu/i.test(f.name||""); }).pop(); return ap ? "\n\n📷 Aperçu de votre sac : "+ap.url : ""; })()
       +"\n\nTotal TTC : "+nf(d.totalTTC)+" "+dev+"\nDevis valable 30 jours. Le devis en PDF suit ce message."
       +"\n\nPour confirmer votre commande, répondez simplement à ce message.\n"+((invoiceSettings&&invoiceSettings.raisonSociale)||"EZPAC");
   }
@@ -4972,7 +5749,7 @@
     var totalFactBrut = facturesC.reduce(function(s,d){ return s+(d.totalTTC||0); },0);
     var totalAvoirs = avoirsC.reduce(function(s,d){ return s+(d.totalTTC||0); },0);
     var totalFact = totalFactBrut - totalAvoirs;
-    var totalPaye = facturesC.filter(function(d){return d.statutPaiement==="Payée";}).reduce(function(s,d){ return s+(d.totalTTC||0); },0);
+    var totalPaye = facturesC.reduce(function(s,d){ return s+encaisseDoc(d); },0);
     return { os:os, factures:facturesC, avoirs:avoirsC, devis:devisC, totalCmd:totalCmd, totalFact:totalFact, totalPaye:totalPaye, solde:totalFact-totalPaye };
   }
   function genererHtmlSituationClient(c){
@@ -5223,7 +6000,7 @@
   // ===================== TABLEAU DE BORD =====================
   function renderDashboard(){
     var totalCA = factures().reduce(function(s,d){return s+(d.totalTTC||0);},0) - avoirs().reduce(function(s,d){return s+(d.totalTTC||0);},0);
-    var totalImpaye = factures().filter(function(d){return d.statutPaiement==="Non payée";}).reduce(function(s,d){return s+(d.totalTTC||0);},0);
+    var totalImpaye = factures().reduce(function(s,d){return s+resteDoc(d);},0);
     var commandesEnCours = orders.filter(function(o){return o.status!=="Terminé" && o.status!=="Annulé";}).length;
     var stockBas = products.filter(function(p){return p.stock!=null && p.seuilAlerte!=null && Number(p.stock)<=Number(p.seuilAlerte);}).length;
     var totalDette = suppliers.reduce(function(s,f){ return s+situationFournisseurDonnees(f).solde; },0);
@@ -5231,11 +6008,13 @@
       '<div class="kpi"><div class="lbl">Clients</div><div class="val">'+clients.length+'</div></div>'
       +'<div class="kpi"><div class="lbl">Commandes en cours</div><div class="val">'+commandesEnCours+'</div></div>'
       +'<div class="kpi"><div class="lbl">CA facturé net</div><div class="val">'+nf(totalCA)+' MAD</div></div>'
-      +'<div class="kpi"><div class="lbl">Factures impayées</div><div class="val" style="color:'+(totalImpaye>0?'var(--danger)':'inherit')+';">'+nf(totalImpaye)+' MAD</div></div>'
+      +'<div class="kpi"><div class="lbl">Reste à encaisser</div><div class="val" style="color:'+(totalImpaye>0?'var(--danger)':'inherit')+';">'+nf(totalImpaye)+' MAD</div></div>'
       +'<div class="kpi"><div class="lbl">Dû aux fournisseurs</div><div class="val" style="color:'+(totalDette>0?'var(--danger)':'inherit')+';">'+nf(totalDette)+' MAD</div></div>'
       +'<div class="kpi"><div class="lbl">Produits en stock bas</div><div class="val" style="color:'+(stockBas>0?'var(--danger)':'inherit')+';">'+stockBas+'</div></div>';
 
+    $("kpiRow").innerHTML += kpisGestion();
     renderRappels();
+    renderTresorerie();
 
     var parMois={}, dateParMois={};
     factures().forEach(function(d){ var m=fmtMonth(d.date); parMois[m]=(parMois[m]||0)+(d.totalTTC||0); if(!dateParMois[m]) dateParMois[m]=d.date; });
@@ -5279,7 +6058,8 @@
   loadCfg();
   if(CFG.url){
     showApp();
-    api({action:"ping"}).then(function(res){ appRole = res.role||"admin"; applyRoleUI(); refresh(); }).catch(function(){ refresh(); });
+    api({action:"ping"}).then(function(res){ appRole = res.role||"admin"; appNom = res.compte ? (res.nom||"") : ""; applyRoleUI(); refresh(); })
+      .catch(function(e){ if(/reconnectez|Clé d'accès incorrecte/.test(e.message)){ toast(e.message); showSetup(); } else refresh(); });
   } else { showSetup(); }
 })();
 </script>
