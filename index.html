@@ -257,15 +257,15 @@
   <div class="field"><label>URL du service</label><input id="setupUrl" placeholder="https://xxxx.supabase.co/functions/v1/ezpac-api"></div>
   <div class="field"><label>Clé d'accès</label><input id="setupKey" placeholder="Clé complète, ou clé lecture seule"></div>
   <div class="hint" style="text-align:center;margin:4px 0 8px;">— ou avec votre compte —</div>
-  <div class="field-row"><div class="field"><label>Identifiant</label><input id="setupIdent" autocomplete="username" placeholder="ex : karim"></div>
-    <div class="field"><label>Mot de passe</label><input id="setupMdp" type="password" autocomplete="current-password"></div></div>
+  <div class="field-row"><div class="field"><label>Identifiant</label><input id="setupIdent" name="ezpac-identifiant" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ex : karim"></div>
+    <div class="field"><label>Mot de passe</label><input id="setupMdp" name="ezpac-mdp" type="password" autocomplete="new-password"></div></div>
   <button class="btn btn-primary btn-block" id="setupSaveBtn">Connecter</button>
   <div class="hint" id="setupStatus" style="margin-top:12px;text-align:center;"></div>
 </div>
 
 <div id="dashScreen" class="dash" style="display:none;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
-    <h2 style="margin:0;">Tableau de bord</h2>
+    <div style="display:flex;align-items:center;gap:10px;"><button type="button" class="btn btn-primary btn-sm" id="dashRetourBtn">← Menus (clients, commandes…)</button><h2 style="margin:0;">Tableau de bord</h2></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;"><button type="button" class="btn btn-ghost btn-sm" id="rapportBtn">📄 Rapport mensuel</button><button type="button" class="btn btn-ghost btn-sm" id="exportComptaBtn">📊 Export comptable</button><button type="button" class="btn btn-ghost btn-sm" id="backupBtn">💾 Sauvegarde complète</button></div>
   </div>
   <div class="kpis" id="kpiRow"></div>
@@ -856,7 +856,9 @@
   // ---------- Config ----------
   function loadCfg(){ try{ CFG.url=localStorage.getItem("sc_url")||""; CFG.key=localStorage.getItem("sc_key")||""; }catch(e){} }
   function saveCfg(u,k){ CFG.url=u; CFG.key=k; try{ localStorage.setItem("sc_url",u); localStorage.setItem("sc_key",k); }catch(e){} }
-  function showSetup(){ $("setupScreen").style.display="block"; $("shell").style.display="none"; $("dashScreen").style.display="none"; $("setupUrl").value=CFG.url; $("setupKey").value=CFG.key; }
+  function showSetup(){ $("setupScreen").style.display="block"; $("shell").style.display="none"; $("dashScreen").style.display="none"; $("setupUrl").value=CFG.url; $("setupKey").value=String(CFG.key||"").indexOf("u.")===0 ? "" : CFG.key;
+    $("setupIdent").value=""; $("setupMdp").value="";
+    $("setupStatus").textContent=String(CFG.key||"").indexOf("u.")===0 ? "Connecté avec un compte. Pour passer en administrateur : collez la clé d'accès, ou entrez un autre identifiant." : ""; }
   function showApp(){ $("setupScreen").style.display="none"; $("dashScreen").style.display="none"; $("shell").style.display="grid"; }
   function showDash(){ $("setupScreen").style.display="none"; $("shell").style.display="none"; $("dashScreen").style.display="block"; renderDashboard(); }
   $("backupBtn").addEventListener("click", sauvegardeComplete);
@@ -889,12 +891,18 @@
       toast("Sauvegarde téléchargée");
     }).catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
   }
-  $("dashBtn").addEventListener("click", showDash);
+  // 📊 ouvre le tableau de bord, et y revient aux menus au 2e clic
+  $("dashBtn").addEventListener("click", function(){ if($("dashScreen").style.display==="block"){ showApp(); renderList(); renderDetail(); } else showDash(); });
+  $("dashRetourBtn").addEventListener("click", function(){ showApp(); renderList(); renderDetail(); });
+  $("appLogo").style.cursor="pointer"; $("appLogo").title="Retour aux menus";
+  $("appLogo").addEventListener("click", function(){ if(CFG.url && $("setupScreen").style.display!=="block"){ showApp(); renderList(); renderDetail(); } });
   $("usersBtn").addEventListener("click", function(){ ouvrirComptes(); });
   $("setupSaveBtn").addEventListener("click", function(){
     var u=$("setupUrl").value.trim(), k=$("setupKey").value.trim();
     if(!u || u.indexOf("http")!==0){ $("setupStatus").textContent="L'URL doit commencer par https://"; return; }
     var ident=$("setupIdent").value.trim();
+    if(ident.indexOf("://")!==-1 || /^www\./i.test(ident) || /\s/.test(ident)){ $("setupIdent").value=""; $("setupMdp").value=""; ident=""; }
+    if(!ident && !k && String(CFG.key||"").indexOf("u.")===0) k=CFG.key; // garder la session du compte
     if(ident){ // compte utilisateur : le jeton remplace la clé
       $("setupStatus").textContent="Connexion…"; var prev0={url:CFG.url,key:CFG.key}; CFG.url=u;
       api({action:"connexion", identifiant:ident, motDePasse:$("setupMdp").value}).then(function(res){
