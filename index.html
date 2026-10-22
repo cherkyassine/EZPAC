@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>CRM</title>
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co https://ezpac.ma https://www.ezpac.ma data: blob:; frame-src 'self' blob: data: https://*.supabase.co; media-src 'self' blob: data: https:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="referrer" content="same-origin">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F2B45">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CRM">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icone-180.png">
+<link rel="icon" type="image/png" href="icone-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -247,6 +258,7 @@
   <button class="bar-btn" id="refreshBtn" title="Actualiser">↻</button>
   <button class="bar-btn" id="companyBtn" title="Coordonnées de l'entreprise" data-mut="1">🏢</button>
   <button class="bar-btn" id="usersBtn" title="Utilisateurs et journal">👥</button>
+  <button class="bar-btn" id="installBtn" title="Installer le CRM sur cet appareil" style="display:none;">📲</button>
   <button class="bar-btn" id="exportAllBtn" title="Sauvegarde : exporter tout le CRM (Excel)">💾</button>
   <button class="bar-btn" id="settingsBtn" title="Configuration">⚙</button>
 </div>
@@ -290,6 +302,9 @@
     <div class="dash-card"><h4>Produits les plus vendus (quantité)</h4><div id="topProductsQty"></div></div>
     <div class="dash-card"><h4>Produits les plus rentables (montant)</h4><div id="topProductsRev"></div></div>
   </div>
+  <div class="dash-grid" style="grid-template-columns:1fr;">
+    <div class="dash-card"><h4>📈 Publications qui amènent des demandes (90 jours)</h4><div id="dashPublications"></div><button type="button" class="btn btn-ghost btn-sm" id="dashPubBtn" style="margin-top:8px;">Voir le détail →</button></div>
+  </div>
 </div>
 
 <div class="shell" id="shell" data-mobile-view="list" style="display:none;">
@@ -309,6 +324,7 @@
         <button class="tab-btn" id="tabDepenses" data-tab="depenses">💸 Dépenses</button>
         <button class="tab-btn" id="tabRelances" data-tab="relances">🔔 Relances</button>
         <button class="tab-btn" id="tabAgenda" data-tab="agenda">📅 Agenda</button>
+        <button class="tab-btn" id="tabPublications" data-tab="publications">📈 Publications</button>
       </div>
       <div class="filter-row" id="orderFilterRow" style="display:none;">
         <select id="orderStatusFilter">
@@ -327,6 +343,7 @@
       <input type="file" id="importExcelInput" accept=".xlsx,.xls,.csv" style="display:none;">
       <button class="btn btn-ghost btn-block" id="importExcelBtn" data-mut="1" style="display:none;margin-top:8px;">📥 Importer depuis Excel</button>
       <button class="btn btn-ghost btn-block" id="catalogueBtn" style="display:none;margin-top:8px;">📘 Catalogue (FR / AR)</button>
+      <button class="btn btn-ghost btn-block" id="prixKgBtn" style="display:none;margin-top:8px;">⚖️ Prix au kg / toute taille</button>
     </div>
   </div>
   <div class="col-detail" id="colDetail">
@@ -774,7 +791,7 @@
   var CFG = { url:"", key:"" };
   var appRole = "admin";
   var clients=[], orders=[], products=[], suppliers=[], documents=[], achats=[], tarifs=[], rappels=[], transporteurs=[], etiquettes=[];
-  var currentId = { clients:null, products:null, suppliers:null, quotes:null, invoices:null, carriers:null, bats:null, atelier:null, prospects:null, depenses:null, relances:null, agenda:null };
+  var currentId = { clients:null, products:null, suppliers:null, quotes:null, invoices:null, carriers:null, bats:null, atelier:null, prospects:null, depenses:null, relances:null, agenda:null, publications:null };
   var editingClientId=null, editingProductId=null, editingSupplierId=null;
   var activeTab = "clients";
   var invoiceSettings = { raisonSociale:'EZPAC', adresse:'Meryem 4 Z.I. Ain Atiq 12020 – Maroc', ice:'003254351000070', rc:'167169',
@@ -893,10 +910,22 @@
   }
   // 📊 ouvre le tableau de bord, et y revient aux menus au 2e clic
   $("dashBtn").addEventListener("click", function(){ if($("dashScreen").style.display==="block"){ showApp(); renderList(); renderDetail(); } else showDash(); });
+  $("dashPubBtn").addEventListener("click", function(){ showApp(); setTab("publications"); });
   $("dashRetourBtn").addEventListener("click", function(){ showApp(); renderList(); renderDetail(); });
   $("appLogo").style.cursor="pointer"; $("appLogo").title="Retour aux menus";
   $("appLogo").addEventListener("click", function(){ if(CFG.url && $("setupScreen").style.display!=="block"){ showApp(); renderList(); renderDetail(); } });
   $("usersBtn").addEventListener("click", function(){ ouvrirComptes(); });
+  // Application installable : icône sur l'écran d'accueil (Android / iPhone / ordinateur)
+  var invitInstall=null, estInstalle=window.matchMedia && window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone===true;
+  var estIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  if("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")) navigator.serviceWorker.register("sw.js").catch(function(){});
+  window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); invitInstall=e; $("installBtn").style.display=""; });
+  window.addEventListener("appinstalled", function(){ invitInstall=null; $("installBtn").style.display="none"; toast("CRM installé ✅"); });
+  if(estIOS && !estInstalle && location.protocol==="https:") $("installBtn").style.display="";
+  $("installBtn").addEventListener("click", function(){
+    if(invitInstall){ invitInstall.prompt(); invitInstall.userChoice.then(function(){ invitInstall=null; }); return; }
+    alert("Pour installer le CRM sur l'iPhone :\n1. Ouvrez cette page dans Safari\n2. Touchez le bouton Partager (carré avec flèche)\n3. Choisissez « Sur l'écran d'accueil »");
+  });
   $("setupSaveBtn").addEventListener("click", function(){
     var u=$("setupUrl").value.trim(), k=$("setupKey").value.trim();
     if(!u || u.indexOf("http")!==0){ $("setupStatus").textContent="L'URL doit commencer par https://"; return; }
@@ -1061,7 +1090,7 @@
     return api({action:"load"}).then(function(res){
       clients=res.clients||[]; orders=res.orders||[]; products=res.products||[];
       suppliers=res.suppliers||[]; documents=res.documents||[]; achats=res.achats||[];
-      tarifs=res.tarifs||[]; rappels=res.rappels||[]; transporteurs=res.transporteurs||[]; etiquettes=res.etiquettes||[]; batsDisponible=res.bats!==null; bats=res.bats||[]; gestionDisponible={ depenses:res.depenses!==null, prospects:res.prospects!==null }; depenses=res.depenses||[]; prospects=res.prospects||[];
+      tarifs=res.tarifs||[]; clics=res.clics||[]; rappels=res.rappels||[]; transporteurs=res.transporteurs||[]; etiquettes=res.etiquettes||[]; batsDisponible=res.bats!==null; bats=res.bats||[]; gestionDisponible={ depenses:res.depenses!==null, prospects:res.prospects!==null }; depenses=res.depenses||[]; prospects=res.prospects||[];
       if(res.settings) invoiceSettings=corrigerParametres(res.settings);
       clients.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
       products.sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""),"fr");});
@@ -1132,12 +1161,13 @@
     else if(activeTab==="depenses") renderDepenseList();
     else if(activeTab==="relances") renderRelanceList();
     else if(activeTab==="agenda") renderAgendaList();
+    else if(activeTab==="publications") renderPublicationList();
     else renderInvoiceList();
   }
-  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"📎 Ajouter des factures (fichiers)", ordersAll:"", carriers:"+ Nouveau transporteur", bats:"+ Nouveau BAT", atelier:"", prospects:"+ Nouveau prospect", depenses:"+ Nouvelle dépense", relances:"", agenda:"+ Rendez-vous" };
+  var newBtnLabels = { clients:"+ Nouveau client", products:"+ Nouveau produit", suppliers:"+ Nouveau fournisseur", quotes:"", invoices:"📎 Ajouter des factures (fichiers)", ordersAll:"", carriers:"+ Nouveau transporteur", bats:"+ Nouveau BAT", atelier:"", prospects:"+ Nouveau prospect", depenses:"+ Nouvelle dépense", relances:"", agenda:"+ Rendez-vous", publications:"" };
   function setTab(tab){
     activeTab=tab;
-    ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll","Carriers","Bats","Atelier","Prospects","Depenses","Relances","Agenda"].forEach(function(t){
+    ["Clients","Products","Suppliers","Quotes","Invoices","OrdersAll","Carriers","Bats","Atelier","Prospects","Depenses","Relances","Agenda","Publications"].forEach(function(t){
       $("tab"+t).classList.toggle("active", t.toLowerCase()===tab.toLowerCase());
     });
     $("searchInput").placeholder="Rechercher…";
@@ -1146,6 +1176,7 @@
     $("orderFilterRow").style.display = tab==="ordersAll" ? "flex" : "none";
     $("importExcelBtn").style.display = tab==="products" ? "block" : "none";
     $("catalogueBtn").style.display = tab==="products" ? "block" : "none";
+    $("prixKgBtn").style.display = tab==="products" && appRole!=="atelier" ? "block" : "none";
     $("clientTagFilterRow").style.display = tab==="clients" ? "flex" : "none";
     renderList(); renderDetail();
   }
@@ -1162,6 +1193,7 @@
   $("tabDepenses").addEventListener("click",function(){ setTab("depenses"); });
   $("tabRelances").addEventListener("click",function(){ setTab("relances"); });
   $("tabAgenda").addEventListener("click",function(){ setTab("agenda"); });
+  $("tabPublications").addEventListener("click",function(){ setTab("publications"); });
   $("newBtn").addEventListener("click", function(){
     if(activeTab==="clients") openClientModal(null);
     else if(activeTab==="products") openProductModal(null);
@@ -1240,7 +1272,7 @@
 
   function renderClientDetail(c){
     var os=ordersOf(c.id);
-    var mapLink = (c.lat!=null && c.lng!=null && c.lat!=="" ) ? '<a href="https://www.google.com/maps?q='+c.lat+','+c.lng+'" target="_blank" rel="noopener">Voir sur la carte ↗</a>' : "";
+    var mapLink = (c.lat!=null && c.lng!=null && c.lat!=="" ) ? '<a href="https://www.google.com/maps?q='+Number(c.lat)+','+Number(c.lng)+'" target="_blank" rel="noopener">Voir sur la carte ↗</a>' : "";
     var h='<div class="detail-inner">';
     h+='<div class="head-block"><div><h2>'+esc(c.name)+'</h2><div class="sub">Client depuis le '+fmtDate(c.createdAt)+'</div></div>';
     h+='<div class="head-actions"><button class="icon-btn" id="editClientBtn" title="Modifier" data-mut="1">✎</button>';
@@ -1401,6 +1433,7 @@
     var batsCmd=bats.filter(function(bt){ return String(bt.orderId)===String(o.id); });
     h+= batsCmd.length ? '<button type="button" class="btn btn-ghost btn-sm" data-voir-bat="'+esc(batsCmd[0].id)+'">🎨 BAT ('+esc(statutProjetBat(batsCmd[0]).txt)+')</button>'
                        : '<button type="button" class="btn btn-ghost btn-sm" data-bat-order="'+esc(o.id)+'" data-mut="1">🎨 BAT</button>';
+    h+='<button type="button" class="btn btn-ghost btn-sm" data-rea-order="'+esc(o.id)+'" data-mut="1" title="Publier une photo de cette commande sur la page Réalisations du site">🖼 Réalisations</button>';
     h+='</div></div></div></div>';
     return h;
   }
@@ -1441,6 +1474,9 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-etq-order="'+o.id+'"]'), function(btn){
       btn.addEventListener("click", function(e){ e.stopPropagation(); openEtiquetteModal(o.id); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rea-order="'+o.id+'"]'), function(btn){
+      btn.addEventListener("click", function(e){ e.stopPropagation(); publierPhotoCommande(o); });
     });
   }
 
@@ -2755,6 +2791,7 @@
       +'<button type="button" class="btn btn-ghost btn-sm" id="m3dFace">↺ Vue de face</button>'
       +'<button type="button" class="btn btn-primary btn-sm" id="m3dJpg">⬇ Image 3D (JPG)</button>'
       +'<button type="button" class="btn btn-gold btn-sm" id="m3dJoindre" data-mut="1">'+esc(libelleJoindre||"📎 Joindre au dernier BAT")+'</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="m3dRea" data-mut="1">🖼 Publier dans Réalisations</button>'
       +'<button type="button" class="btn btn-ghost btn-sm" id="m3dFermer">✕ Fermer</button></div>'
       +'<div class="hint" style="text-align:center;padding:0 10px 10px;background:#fff;">Glisser pour tourner le sac · molette pour zoomer</div></div>';
     document.body.appendChild(ov);
@@ -2992,6 +3029,11 @@
     ov.querySelector("#m3dJpg").addEventListener("click", function(){
       capture().then(function(bl){ var a=document.createElement("a"); a.href=URL.createObjectURL(bl); a.download=nom+".jpg"; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000); })
         .catch(function(e){ toast("Échec : "+e.message); });
+    });
+    ov.querySelector("#m3dRea").addEventListener("click", async function(){
+      var btn=this; btn.disabled=true;
+      try{ await publierRealisation(await capture(), { genre:"mockup", modele:MODELES_REA[p.type]||"" }); } catch(e){ toast("Échec : "+e.message); }
+      btn.disabled=false;
     });
     ov.querySelector("#m3dJoindre").addEventListener("click", async function(){
       var btn=this; btn.disabled=true;
@@ -3313,7 +3355,7 @@
     if(commandeActive(o)){ if(n===ETAPES_FAB.length) ns="Terminé"; else if(n>0 && ns==="Nouveau") ns="En cours"; }
     if(ns!==(o.status||"Nouveau")){ corps.status=ns; corps.statusHistory=(o.statusHistory||[]).concat([{ status:ns, at:new Date().toISOString() }]); }
     return api({ action:"saveOrder", order:corps }).then(function(){ toast(message+(corps.status ? " — commande « "+corps.status+" »" : "")); refresh(); })
-      .catch(function(e){ toast(/production|date_livraison/.test(e.message) ? "Exécutez d'abord le script SQL 1-colonnes.sql dans Supabase." : "Échec : "+e.message); });
+      .catch(function(e){ toast(/production|date_livraison/.test(e.message) ? "Exécutez d'abord le script SQL 1-colonnes.sql dans Supabase." : "Échec : "+e.message); return false; });
   }
   function cablerFabrication(o, racine){
     racine=racine||document;
@@ -3322,7 +3364,8 @@
       cb.addEventListener("change", function(){
         var et=prodCommande(o).etapes, k=cb.getAttribute("data-fab-etape");
         if(cb.checked) et[k]=new Date().toISOString(); else delete et[k];
-        enregistrerFabrication(o, et, undefined, (ETAPES_FAB.find(function(x){ return x[0]===k; })||[])[1]+(cb.checked?" ✓":" décoché"));
+        var fait=enregistrerFabrication(o, et, undefined, (ETAPES_FAB.find(function(x){ return x[0]===k; })||[])[1]+(cb.checked?" ✓":" décoché"));
+        if(cb.checked && k==="livre") fait.then(function(ok){ if(ok!==false) proposerAvis(o, et); });
       });
     });
     Array.prototype.forEach.call(racine.querySelectorAll('[data-fab-date="'+o.id+'"]'), function(inp){
@@ -3618,7 +3661,7 @@
   function noterRelanceFaite(r){
     if(r.type==="devis"||r.type==="facture") return api({ action:"noterSuivi", id:r.cle });
     if(r.type==="prospect") return api({ action:"saveProspect", prospect:Object.assign({}, r.pro, { relanceLe:ajouterJours(3), notes:((r.pro.notes||"")+"\nRelancé le "+dateCourte(aujourdhui())).trim() }) });
-    var pr=prodCommande(r.cmd); return api({ action:"saveOrder", order:{ id:r.cmd.id, production:{ etapes:pr.etapes, notes:pr.notes, avisDemande:new Date().toISOString() } } });
+    return noterAvisDemande(r.cmd);
   }
   function renderRelanceList(){
     var el=$("listScroll"), liste=relancesDuJour(), groupes=[["devis","📄 Devis sans réponse"],["facture","💰 Paiements à relancer"],["prospect","🎯 Prospects à relancer"],["avis","⭐ Remerciement + avis Google"]];
@@ -3722,12 +3765,12 @@
   var NOMS_ROLES={ admin:"Administrateur (tout)", commercial:"Commercial (clients, devis, factures — sans dépenses ni paramètres)", atelier:"Atelier (commandes, fabrication, BAT — sans prix ni factures)", lecture:"Lecture seule" };
   function appliquerDroitsUI(){
     var cacher=function(ids, oui){ ids.forEach(function(id){ var e=$(id); if(e) e.style.display = oui ? "none" : ""; }); };
-    cacher(["tabQuotes","tabInvoices","tabProspects","tabDepenses","tabSuppliers","tabRelances","dashBtn","exportAllBtn"], appRole==="atelier");
+    cacher(["tabQuotes","tabInvoices","tabProspects","tabDepenses","tabSuppliers","tabRelances","tabPublications","dashBtn","exportAllBtn"], appRole==="atelier");
     if(appRole!=="atelier") cacher(["tabDepenses"], appRole==="commercial");
     cacher(["companyBtn","usersBtn"], appRole!=="admin");
     var tag=$("roleTag");
     if(appNom && appRole!=="lecture"){ tag.style.display="inline-block"; tag.textContent="👤 "+appNom; }
-    if(appRole==="atelier" && ["quotes","invoices","prospects","depenses","suppliers","relances"].indexOf(activeTab)!==-1) setTab("atelier");
+    if(appRole==="atelier" && ["quotes","invoices","prospects","depenses","suppliers","relances","publications"].indexOf(activeTab)!==-1) setTab("atelier");
   }
   var LIBELLES_ACTIONS={ connexion:"s'est connecté(e)", saveClient:"client enregistré", deleteClient:"client supprimé", saveOrder:"commande / fabrication", deleteOrder:"commande supprimée",
     saveProduct:"produit enregistré", deleteProduct:"produit supprimé", saveSupplier:"fournisseur enregistré", deleteSupplier:"fournisseur supprimé", genererDevis:"devis créé", genererDocument:"document créé (BC / BL / facture)",
@@ -3839,6 +3882,496 @@
     feuilles["Achats fournisseurs"]=[["Date","N°","Fournisseur","Montant","Paiement"]].concat(D.ach.map(function(a){ var f=suppliers.find(function(x){ return String(x.id)===String(a.fournisseurId); })||{}; return [String(a.createdAt||"").slice(0,10), a.numero||"", f.name||"", arr2(totalAchat(a)), a.statutPaiement||""]; }));
     feuilles["Synthèse"]=[["Période",libellePeriode(p)],["CA HT",arr2(D.ht)],["TVA collectée",arr2(D.tva)],["CA TTC",arr2(D.ttc)],["Encaissé",arr2(D.encTotal)],["Dépenses",arr2(D.depTotal)],["Achats",arr2(D.achTotal)]];
     exportExcelFile("export-comptable-"+p+".xlsx", feuilles);
+  }
+
+  // ===================== PUBLICATIONS : QUELS POSTS / REELS AMÈNENT DES DEMANDES =====================
+  // La source est écrite par le site dans les notes du devis : « Source : Facebook — campagne « x » — annonce « y » »
+  var periodePub=90;
+  function sourceDevisWeb(d){
+    var n=d.notes||"";
+    if(!/Demande reçue depuis le site web/.test(n)) return null;
+    var m=/^Source : (.+)$/m.exec(n), ligne=m?m[1]:"";
+    var canal=(ligne.split(" — ")[0]||"").trim()||"Non renseignée";
+    var c=/campagne « (.*?) »/.exec(ligne), a=/annonce « (.*?) »/.exec(ligne);
+    return { canal:canal, campagne:c?c[1]:"", contenu:a?a[1]:"" };
+  }
+  function cleReseau(canal){ return String(canal||"").replace(/\s*\(.*\)$/,""); }
+  function demandesWeb(jours){
+    var depuis=jours ? Date.now()-jours*86400000 : 0;
+    return documents.filter(function(d){ return d.type==="DEVIS"; }).map(function(d){
+      var s=sourceDevisWeb(d); if(!s) return null;
+      var t=new Date(d.createdAt||d.date).getTime(); if(depuis && t<depuis) return null;
+      var gagne=d.statutDevis==="Accepté"||d.statutDevis==="Converti";
+      var facture=d.orderId ? factures().filter(function(f){ return String(f.orderId)===String(d.orderId); }).reduce(function(x,f){ return x+Number(f.totalTTC||0); },0) : 0;
+      return { d:d, t:t, canal:s.canal, campagne:s.campagne, contenu:s.contenu, envoye:d.statutDevis!=="Demande web", gagne:gagne, montant:gagne?Number(d.totalTTC||0):0, facture:facture };
+    }).filter(Boolean).sort(function(a,b){ return b.t-a.t; });
+  }
+  // Clics sur WhatsApp / téléphone depuis le site (sans formulaire), avec la même source que les demandes
+  var clics=[];
+  function clicsWeb(jours){
+    var depuis=jours ? Date.now()-jours*86400000 : 0;
+    return (clics||[]).map(function(c){ return { t:new Date(c.date).getTime(), type:c.type, canal:c.canal||"Direct / inconnu", campagne:c.campagne||"", contenu:c.contenu||"", page:c.page||"" }; })
+      .filter(function(c){ return !depuis || c.t>=depuis; });
+  }
+  function regrouperDemandes(liste, cle, listeClics){
+    var g={};
+    var groupe=function(x){ var k=cle(x); return g[k]||(g[k]={ cle:k, canal:x.canal, campagne:x.campagne, contenu:x.contenu, n:0, envoyes:0, gagnes:0, montant:0, facture:0, wa:0, tel:0, dernier:0, items:[] }); };
+    liste.forEach(function(x){ var b=groupe(x);
+      b.n++; if(x.envoye) b.envoyes++; if(x.gagne) b.gagnes++; b.montant+=x.montant; b.facture+=x.facture; b.dernier=Math.max(b.dernier,x.t); b.items.push(x);
+    });
+    (listeClics||[]).forEach(function(c){ var b=groupe(c); if(c.type==="telephone") b.tel++; else b.wa++; b.dernier=Math.max(b.dernier,c.t); });
+    return Object.keys(g).map(function(k){ return g[k]; }).sort(function(a,b){ return (b.gagnes-a.gagnes)||(b.n-a.n)||((b.wa+b.tel)-(a.wa+a.tel))||(b.dernier-a.dernier); });
+  }
+  function clePublication(x){ return x.canal+"|"+(x.campagne||"")+"|"+(x.contenu||""); }
+  function nomPublication(b){
+    if(b.campagne) return b.campagne+(b.contenu?" · "+b.contenu:"");
+    if(b.contenu) return b.contenu;
+    return /Direct|Non renseignée/.test(b.canal) ? "Visite directe (lien tapé, favori…)" : "Lien sans nom de publication";
+  }
+  function lignePerf(b){
+    var taux=b.n ? Math.round(100*b.gagnes/b.n) : 0;
+    return '<span><strong>'+b.n+'</strong> demande'+(b.n>1?'s':'')+'</span>'
+      +'<span>'+b.gagnes+' gagnée'+(b.gagnes>1?'s':'')+' ('+taux+' %)</span>'
+      +(b.montant?'<span style="color:var(--success);">'+nf(b.montant)+' MAD</span>':'')
+      +(b.wa?'<span title="Clics sur WhatsApp depuis le site">💬 '+b.wa+'</span>':'')+(b.tel?'<span title="Clics sur le numéro de téléphone">📞 '+b.tel+'</span>':'');
+  }
+  function renderPublicationList(){
+    var el=$("listScroll"), liste=demandesWeb(periodePub), lc=clicsWeb(periodePub);
+    var parReseau=regrouperDemandes(liste, function(x){ return cleReseau(x.canal); }, lc);
+    var parPub=regrouperDemandes(liste, clePublication, lc);
+    var nWa=lc.filter(function(c){ return c.type!=="telephone"; }).length, nTel=lc.length-nWa;
+    var h='<div class="summary-bar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">Demandes reçues du site sur '
+      +'<select id="pubPeriode" style="width:auto;padding:4px 8px;">'+[[30,"30 jours"],[90,"90 jours"],[365,"12 mois"],[0,"tout"]].map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===periodePub?' selected':'')+'>'+p[1]+'</option>'; }).join("")+'</select>'
+      +' : <strong>'+liste.length+'</strong>'+' · 💬 <strong>'+nWa+'</strong> clics WhatsApp · 📞 <strong>'+nTel+'</strong> appels'+'</div>'
+      +'<button type="button" class="btn btn-gold btn-sm" id="pubLienBtn" style="margin:0 4px 8px;">🔗 Créer le lien d\'une publication</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" id="pubReaBtn" style="margin:0 4px 8px;">🖼 Réalisations du site</button>';
+    if(!liste.length && !lc.length) h+='<div class="placeholder" style="padding:20px;">Aucune demande du site sur cette période.<br>Mettez un lien suivi (bouton ci-dessus) dans chaque post ou reel pour savoir lequel amène des clients.</div>';
+    else {
+      h+='<div class="hint" style="margin:10px 4px 4px;font-weight:700;">📊 Par réseau</div>';
+      parReseau.forEach(function(b){
+        h+='<div class="row-card" data-pub-reseau="'+esc(b.cle)+'"><div class="name">'+esc(b.cle)+'</div><div class="meta" style="gap:10px;">'+lignePerf(b)+'</div></div>';
+      });
+      h+='<div class="hint" style="margin:14px 4px 4px;font-weight:700;">📣 Par publication</div>';
+      parPub.forEach(function(b){
+        h+='<div class="row-card'+(currentId.publications===b.cle?' active':'')+'" data-pub="'+esc(b.cle)+'"><div class="name">'+esc(nomPublication(b))+'</div>'
+          +'<div class="meta"><span>'+esc(b.canal)+'</span><span>dernière : '+fmtDate(new Date(b.dernier).toISOString())+'</span></div><div class="meta" style="gap:10px;">'+lignePerf(b)+'</div></div>';
+      });
+    }
+    el.innerHTML=h;
+    $("pubPeriode").addEventListener("change", function(){ periodePub=Number(this.value); renderPublicationList(); renderPublicationDetail(); });
+    $("pubReaBtn").addEventListener("click", ouvrirRealisations);
+    $("pubLienBtn").addEventListener("click", function(){ currentId.publications=null; renderPublicationList(); renderPublicationDetail(); });
+    Array.prototype.forEach.call(el.querySelectorAll("[data-pub]"), function(c){ c.addEventListener("click", function(){ currentId.publications=c.getAttribute("data-pub"); renderPublicationList(); renderPublicationDetail(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll("[data-pub-reseau]"), function(c){ c.addEventListener("click", function(){ currentId.publications="reseau:"+c.getAttribute("data-pub-reseau"); renderPublicationList(); renderPublicationDetail(); }); });
+  }
+  function renderPublicationDetail(){
+    var k=currentId.publications, liste=demandesWeb(periodePub), lc=clicsWeb(periodePub), b=null;
+    if(k && k.indexOf("reseau:")===0) b=regrouperDemandes(liste, function(x){ return cleReseau(x.canal); }, lc).find(function(g){ return "reseau:"+g.cle===k; });
+    else if(k) b=regrouperDemandes(liste, clePublication, lc).find(function(g){ return g.cle===k; });
+    if(!b){ renderGenerateurLien(); return; }
+    var titre=k.indexOf("reseau:")===0 ? b.cle+" (toutes publications)" : nomPublication(b);
+    var h='<div class="detail-inner"><div class="head-block"><div><h2>'+esc(titre)+'</h2><div class="sub">'+esc(b.canal)+' · '+(periodePub?periodePub+' derniers jours':'depuis le début')+'</div></div></div>'
+      +'<div class="kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:10px 0;">'
+      +[["Demandes",b.n],["Devis envoyés",b.envoyes],["Gagnés",b.gagnes+" ("+(b.n?Math.round(100*b.gagnes/b.n):0)+" %)"],["Montant gagné",nf(b.montant)+" MAD"],["Déjà facturé",nf(b.facture)+" MAD"],["💬 Clics WhatsApp",b.wa],["📞 Clics téléphone",b.tel]]
+        .map(function(x){ return '<div class="kpi"><div class="lbl">'+x[0]+'</div><div class="val" style="font-size:17px;">'+x[1]+'</div></div>'; }).join("")+'</div>'
+      +((b.wa||b.tel)?'<div class="hint" style="margin-bottom:8px;">Clics = visiteurs qui ont touché le bouton WhatsApp ou le numéro sur le site sans remplir le formulaire : comparez avec les conversations WhatsApp reçues.</div>':'')
+      +'<div class="section-head"><h3>Demandes</h3></div>'+(b.items.length?'':'<div class="hint">Aucune demande par formulaire.</div>');
+    b.items.forEach(function(x){
+      var st=x.d.statutDevis||"";
+      h+='<div class="row-card" data-pub-devis="'+esc(x.d.id)+'"><div class="name">'+esc(x.d.clientName||"")+' — '+esc(x.d.numero||"")+'</div>'
+        +'<div class="meta"><span>'+fmtDate(x.d.createdAt||x.d.date)+'</span><span class="pill '+(x.gagne?'pill-success':st==="Refusé"?'pill-danger':'pill-amber')+'">'+esc(st)+'</span><span>'+nf(x.d.totalTTC)+' '+esc(x.d.currency||"MAD")+'</span>'
+        +(k.indexOf("reseau:")===0 && (x.campagne||x.contenu)?'<span>📣 '+esc(x.campagne||x.contenu)+'</span>':'')+'</div></div>';
+    });
+    h+='<div class="item-row" style="margin-top:10px;"><button type="button" class="btn btn-ghost btn-sm" id="pubLien2">🔗 Créer un lien de publication</button></div></div>';
+    $("colDetail").innerHTML=h;
+    Array.prototype.forEach.call($("colDetail").querySelectorAll("[data-pub-devis]"), function(c){ c.addEventListener("click", function(){ currentId.quotes=c.getAttribute("data-pub-devis"); setTab("quotes"); }); });
+    $("pubLien2").addEventListener("click", function(){ currentId.publications=null; renderPublicationList(); renderGenerateurLien(); });
+  }
+  // Générateur de liens suivis : chaque post / reel a son propre lien → la demande arrive avec son nom
+  function slugPub(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,60); }
+  function liensRecents(){ try { return JSON.parse(localStorage.getItem("ezpac_liens_pub")||"[]"); } catch(e){ return []; } }
+  function renderGenerateurLien(){
+    var pages=[["","Accueil"],["realisations.html","Réalisations"]];
+    var h='<div class="detail-inner"><div class="head-block"><div><h2>🔗 Lien suivi pour une publication</h2><div class="sub">Mettez ce lien dans le post, le reel, la story ou la pub : chaque demande de devis venant de ce lien s\'affichera ici avec le nom de la publication.</div></div></div>'
+      +'<div class="field-row"><div class="field"><label>Réseau</label><select id="glReseau"><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="whatsapp">WhatsApp (statut / groupe)</option><option value="google">Google</option></select></div>'
+      +'<div class="field"><label>Type</label><select id="glType"><option value="post">Post</option><option value="reel">Reel / vidéo</option><option value="story">Story</option><option value="bio">Lien en bio</option><option value="pub">Publicité payante</option></select></div></div>'
+      +'<div class="field-row"><div class="field"><label>Nom de la publication</label><input id="glNom" placeholder="ex : reel darija 3D octobre"></div>'
+      +'<div class="field"><label>Page d\'arrivée</label><select id="glPage">'+pages.map(function(p){ return '<option value="'+p[0]+'">'+p[1]+'</option>'; }).join("")+'<option value="autre">Autre page…</option></select></div></div>'
+      +'<div class="field" id="glAutreWrap" style="display:none;"><label>Adresse de la page (sur ezpac.ma)</label><input id="glAutre" placeholder="sac-tissu-non-tisse-a-anse.html"></div>'
+      +'<div class="field"><label>Lien à publier</label><input id="glLien" readonly style="font-family:monospace;font-size:12px;"></div>'
+      +'<div class="item-row" style="gap:6px;"><button type="button" class="btn btn-gold btn-sm" id="glCopier">📋 Copier le lien</button></div>'
+      +'<div class="hint" style="margin-top:8px;">Astuce : un nom différent par publication (ex. « post sac anse pharmacie », « reel darija 3D »). Les visites restent attribuées 60 jours, même si le client revient plus tard sur le site.</div>'
+      +'<div id="glRecents"></div></div>';
+    $("colDetail").innerHTML=h;
+    var maj=function(){
+      var r=$("glReseau").value, t=$("glType").value, nom=slugPub($("glNom").value), page=$("glPage").value;
+      $("glAutreWrap").style.display = page==="autre" ? "" : "none";
+      if(page==="autre") page=String($("glAutre").value||"").trim().replace(/^https?:\/\/(www\.)?ezpac\.ma\/?/i,"").replace(/^\/+/,"");
+      var medium = t==="pub" ? (r==="google"?"cpc":"paid") : (t==="bio"?"bio":"social");
+      var q="utm_source="+encodeURIComponent(r)+"&utm_medium="+medium+(nom?"&utm_campaign="+encodeURIComponent(nom):"")+"&utm_content="+encodeURIComponent(t);
+      $("glLien").value="https://ezpac.ma/"+page+"?"+q;
+    };
+    ["glReseau","glType","glPage"].forEach(function(id){ $(id).addEventListener("change", maj); });
+    ["glNom","glAutre"].forEach(function(id){ $(id).addEventListener("input", maj); });
+    maj();
+    var afficherRecents=function(){
+      var l=liensRecents(); if(!l.length){ $("glRecents").innerHTML=""; return; }
+      $("glRecents").innerHTML='<div class="section-head" style="margin-top:14px;"><h3>Liens créés sur cet appareil</h3></div>'+l.map(function(x){
+        return '<div class="row-card" style="cursor:default;"><div class="name">'+esc(x.nom||"(sans nom)")+'</div><div class="meta"><span style="word-break:break-all;font-family:monospace;font-size:11px;">'+esc(x.lien)+'</span></div></div>'; }).join("");
+    };
+    afficherRecents();
+    $("glCopier").addEventListener("click", function(){
+      var lien=$("glLien").value;
+      if(!slugPub($("glNom").value)){ toast("Donnez un nom à la publication"); $("glNom").focus(); return; }
+      var fini=function(){ toast("Lien copié"); };
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(lien).then(fini, function(){ $("glLien").select(); document.execCommand("copy"); fini(); });
+      else { $("glLien").select(); document.execCommand("copy"); fini(); }
+      try { var l=liensRecents().filter(function(x){ return x.lien!==lien; }); l.unshift({ nom:$("glNom").value.trim(), lien:lien }); localStorage.setItem("ezpac_liens_pub", JSON.stringify(l.slice(0,15))); } catch(e){}
+      afficherRecents();
+    });
+  }
+  // Carte du tableau de bord : les publications qui rapportent le plus (90 jours)
+  function htmlTopPublications(){
+    var g=regrouperDemandes(demandesWeb(90), clePublication, clicsWeb(90)).slice(0,6);
+    if(!g.length) return '<div class="hint">Aucune demande ni clic du site ces 90 derniers jours.</div>';
+    return g.map(function(b){ return '<div class="item-row" style="justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line,#eee);"><span>'+esc(nomPublication(b))+' <span class="hint">· '+esc(b.canal)+'</span></span><span>'+b.n+' dem. · '+b.gagnes+' gagnée'+(b.gagnes>1?'s':'')+(b.montant?' · <strong>'+nf(b.montant)+' MAD</strong>':'')+(b.wa?' · 💬 '+b.wa:'')+(b.tel?' · 📞 '+b.tel:'')+'</span></div>'; }).join("");
+  }
+
+  // ===================== RÉALISATIONS : GALERIE DU SITE (photos de commandes livrées + mockups) =====================
+  var METIERS_REA=["Pharmacie / parapharmacie","Boutique de mode","Boulangerie / pâtisserie","Restaurant / traiteur","Épicerie / supermarché","Salon / événement","Cadeau d'entreprise","Parfumerie / cosmétique","Autre commerce"];
+  var MODELES_REA={ anse:"Sac à anses", poignee:"Sac à poignée", bretelle:"Sac à bretelles", box:"Premium Box" };
+  var VILLES_REA=["Casablanca","Rabat","Salé","Témara","Kénitra","Tanger","Marrakech","Agadir","Fès","Meknès","Oujda"];
+  function chargerRealisations(){ return api({action:"listRealisations"}).then(function(r){ return r.realisations||[]; }); }
+  function enregistrerRealisations(liste){ return api({action:"saveRealisations", realisations:liste}).then(function(r){ return r.realisations||liste; }); }
+  function villeDepuisTexte(t){ var s=String(t||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); return VILLES_REA.find(function(v){ return s.indexOf(v.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""))!==-1; })||""; }
+  // Envoie l'image (réduite à 1400 px) et ouvre la fiche pour la publier
+  async function publierRealisation(image, infos){
+    var img=await imageReduite(image, 1400);
+    var res=await api({action:"uploadFile", filename:"realisation-"+Date.now()+".jpg", mimeType:img.mime, data:img.data});
+    return formRealisation(Object.assign({ image:res.file.url, genre:"photo", visible:true, date:new Date().toISOString().slice(0,10) }, infos||{}), true);
+  }
+  function infosDepuisCommande(o){
+    var lignes=lignesDeCommande(o), c=clients.find(function(x){ return String(x.id)===String(o.clientId); })||{};
+    var texte=(o.title||"")+" "+lignes.map(function(l){ return l.designation; }).join(" ");
+    var type=typeSacDepuisTexte(texte);
+    return { orderId:o.id, modele:type?MODELES_REA[type]||"":"", quantite:lignes.reduce(function(s,l){ return s+(Number(l.quantity)||0); },0),
+      ville:villeDepuisTexte(c.address), titre:"", date:String(o.dateLivraison||new Date().toISOString()).slice(0,10) };
+  }
+  function formRealisation(r, nouveau){
+    return new Promise(function(fini){
+      var ov=document.createElement("div"); ov.className="overlay open";
+      var opt=function(liste, v){ return '<option value=""></option>'+liste.map(function(x){ return '<option'+(x===v?' selected':'')+'>'+esc(x)+'</option>'; }).join(""); };
+      ov.innerHTML='<div class="modal" style="max-width:620px;"><h3>🖼 '+(nouveau?'Publier dans les réalisations du site':'Modifier la réalisation')+'</h3>'
+        +'<div style="text-align:center;margin-bottom:10px;"><img src="'+esc(r.image)+'" alt="" style="max-width:100%;max-height:260px;border-radius:10px;border:1px solid var(--line);"></div>'
+        +'<div class="field-row"><div class="field"><label>Titre (français)</label><input id="reTitre" value="'+esc(r.titre||"")+'" placeholder="ex : Sacs à poignée pour une pharmacie"></div>'
+        +'<div class="field"><label>Titre (arabe, facultatif)</label><input id="reTitreAr" dir="rtl" value="'+esc(r.titreAr||"")+'"></div></div>'
+        +'<div class="field-row"><div class="field"><label>Métier du client</label><select id="reMetier">'+opt(METIERS_REA, r.metier)+'</select></div>'
+        +'<div class="field"><label>Ville</label><input id="reVille" list="reVilles" value="'+esc(r.ville||"")+'"><datalist id="reVilles">'+VILLES_REA.map(function(v){ return '<option value="'+esc(v)+'">'; }).join("")+'</datalist></div></div>'
+        +'<div class="field-row"><div class="field"><label>Modèle</label><select id="reModele">'+opt(Object.keys(MODELES_REA).map(function(k){ return MODELES_REA[k]; }), r.modele)+'</select></div>'
+        +'<div class="field"><label>Quantité</label><input id="reQte" type="number" min="0" value="'+(r.quantite||"")+'"></div></div>'
+        +'<div class="field-row"><div class="field"><label>Type d\'image</label><select id="reGenre"><option value="photo"'+(r.genre!=="mockup"?' selected':'')+'>📷 Photo de commande livrée</option><option value="mockup"'+(r.genre==="mockup"?' selected':'')+'>🧊 Mockup / visuel</option></select></div>'
+        +'<div class="field"><label>Date</label><input id="reDate" type="date" value="'+esc(r.date||"")+'"></div></div>'
+        +'<label style="display:flex;gap:8px;align-items:center;margin:6px 0;"><input type="checkbox" id="reVisible"'+(r.visible!==false?' checked':'')+'> Visible sur le site</label>'
+        +'<div class="hint">Le nom du client n\'apparaît pas sur le site. Ne mettez le nom de la marque dans le titre qu\'avec son accord.</div>'
+        +'<div class="modal-actions"><button type="button" class="btn btn-ghost" id="reAnnuler">Annuler</button><button type="button" class="btn btn-primary" id="reOk" data-mut="1">'+(nouveau?'Publier':'Enregistrer')+'</button></div></div>';
+      document.body.appendChild(ov);
+      var fermer=function(v){ ov.remove(); fini(v); };
+      ov.querySelector("#reAnnuler").addEventListener("click", function(){ fermer(null); });
+      ov.querySelector("#reOk").addEventListener("click", async function(){
+        var btn=this; btn.disabled=true;
+        var m=Object.assign({}, r, { titre:$("reTitre").value.trim(), titreAr:$("reTitreAr").value.trim(), metier:$("reMetier").value, ville:$("reVille").value.trim(),
+          modele:$("reModele").value, quantite:Number($("reQte").value)||0, genre:$("reGenre").value, date:$("reDate").value, visible:$("reVisible").checked });
+        if(!m.titre) m.titre=[m.modele||"Sacs personnalisés", m.metier?"· "+m.metier:""].join(" ").trim();
+        try{
+          var liste=await chargerRealisations();
+          if(!m.id) m.id="rea_"+Date.now().toString(36);
+          var i=liste.findIndex(function(x){ return x.id===m.id; });
+          if(i>=0) liste[i]=m; else liste.unshift(m);
+          await enregistrerRealisations(liste);
+          toast(nouveau?"Publié sur la page Réalisations ✅":"Enregistré"); fermer(m);
+        }catch(e){ toast("Échec : "+e.message); btn.disabled=false; }
+      });
+    });
+  }
+  // Choix de la photo d'une commande : fichier joint (image) ou nouvelle photo (appareil photo sur téléphone)
+  function publierPhotoCommande(o){
+    var images=(o.files||[]).filter(function(f){ return /\.(jpe?g|png|webp)$/i.test(f.name||""); });
+    var ov=document.createElement("div"); ov.className="overlay open";
+    ov.innerHTML='<div class="modal" style="max-width:560px;"><h3>🖼 Photo de la commande pour le site</h3>'
+      +(images.length?'<div class="hint" style="margin-bottom:6px;">Choisissez une photo jointe à la commande :</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;">'
+        +images.map(function(f,i){ return '<button type="button" class="btn btn-ghost" data-rea-img="'+i+'" style="padding:4px;"><img src="'+esc(f.url)+'" alt="" style="width:100%;height:90px;object-fit:cover;border-radius:6px;"></button>'; }).join("")+'</div>':'')
+      +'<div style="margin-top:12px;"><input type="file" accept="image/*" capture="environment" id="reaFichier" style="display:none;"><button type="button" class="btn btn-gold btn-sm" id="reaPrendre">📷 Prendre / choisir une photo</button></div>'
+      +'<div class="modal-actions"><button type="button" class="btn btn-ghost" id="reaFermer">Fermer</button></div></div>';
+    document.body.appendChild(ov);
+    var fermer=function(){ ov.remove(); };
+    var lancer=async function(source, btn){
+      if(btn) btn.disabled=true;
+      try{ fermer(); await publierRealisation(source, infosDepuisCommande(o)); }
+      catch(e){ toast("Échec : "+e.message); }
+    };
+    ov.querySelector("#reaFermer").addEventListener("click", fermer);
+    ov.querySelector("#reaPrendre").addEventListener("click", function(){ ov.querySelector("#reaFichier").click(); });
+    ov.querySelector("#reaFichier").addEventListener("change", function(){ var f=this.files&&this.files[0]; if(f) lancer(f); });
+    Array.prototype.forEach.call(ov.querySelectorAll("[data-rea-img]"), function(b){ b.addEventListener("click", async function(){
+      var f=images[Number(b.getAttribute("data-rea-img"))]; b.disabled=true;
+      try{ var bl=await (await fetch(f.url)).blob(); lancer(bl, b); } catch(e){ toast("Photo illisible : "+e.message); b.disabled=false; }
+    }); });
+  }
+  // Gestion de la galerie : ordre, visibilité, modification, suppression
+  function ouvrirRealisations(){
+    var ov=document.createElement("div"), liste=[]; ov.className="overlay open";
+    ov.innerHTML='<div class="modal" style="max-width:820px;"><h3>🖼 Réalisations du site <span class="hint">(page ezpac.ma/realisations.html)</span></h3>'
+      +'<div class="item-row" style="gap:6px;margin-bottom:10px;flex-wrap:wrap;"><input type="file" accept="image/*" id="rgFichier" style="display:none;"><button type="button" class="btn btn-gold btn-sm" id="rgAjouter" data-mut="1">+ Ajouter une photo</button>'
+      +'<a class="btn btn-ghost btn-sm" href="https://ezpac.ma/realisations.html" target="_blank" rel="noopener">Voir la page ↗</a></div>'
+      +'<div class="hint" style="margin-bottom:8px;">Astuce : depuis une commande livrée → « 🖼 Réalisations », ou depuis un mockup 3D → « 🖼 Publier dans Réalisations ».</div>'
+      +'<div id="rgListe"><div class="hint">Chargement…</div></div><div class="modal-actions"><button type="button" class="btn btn-ghost" id="rgFermer">Fermer</button></div></div>';
+    document.body.appendChild(ov);
+    var sauver=function(){ return enregistrerRealisations(liste).then(function(l){ liste=l; afficher(); }).catch(function(e){ toast("Échec : "+e.message); }); };
+    var afficher=function(){
+      var el=ov.querySelector("#rgListe");
+      if(!liste.length){ el.innerHTML='<div class="placeholder" style="padding:20px;">Aucune réalisation publiée. Le site affiche pour l\'instant les 5 mockups de base.</div>'; return; }
+      el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;">'+liste.map(function(r,i){
+        return '<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--paper,#fff);'+(r.visible===false?'opacity:.5;':'')+'">'
+          +'<img src="'+esc(r.image)+'" alt="" style="width:100%;height:130px;object-fit:cover;display:block;">'
+          +'<div style="padding:6px 8px;font-size:12px;"><strong>'+esc(r.titre||"(sans titre)")+'</strong><div class="hint">'+(r.genre==="mockup"?"🧊 mockup":"📷 photo")+(r.ville?" · "+esc(r.ville):"")+(r.visible===false?" · masquée":"")+'</div>'
+          +'<div class="item-row" style="gap:4px;margin-top:4px;flex-wrap:wrap;"><button type="button" class="btn btn-ghost btn-sm" data-rg="haut" data-i="'+i+'" title="Monter"'+(i?'':' disabled')+'>↑</button>'
+          +'<button type="button" class="btn btn-ghost btn-sm" data-rg="modif" data-i="'+i+'">✎</button>'
+          +'<button type="button" class="btn btn-ghost btn-sm" data-rg="vis" data-i="'+i+'">'+(r.visible===false?'👁 Afficher':'🚫 Masquer')+'</button>'
+          +'<button type="button" class="btn btn-ghost btn-sm" data-rg="suppr" data-i="'+i+'" title="Retirer du site">🗑</button></div></div></div>';
+      }).join("")+'</div>';
+      Array.prototype.forEach.call(el.querySelectorAll("[data-rg]"), function(b){ b.addEventListener("click", async function(){
+        var i=Number(b.getAttribute("data-i")), a=b.getAttribute("data-rg"), r=liste[i];
+        if(a==="haut" && i>0){ liste.splice(i-1, 0, liste.splice(i,1)[0]); sauver(); }
+        else if(a==="vis"){ r.visible=r.visible===false; sauver(); }
+        else if(a==="suppr"){ if(confirm("Retirer cette réalisation du site ?")){ liste.splice(i,1); sauver(); } }
+        else if(a==="modif"){ var m=await formRealisation(r, false); if(m) chargerRealisations().then(function(l){ liste=l; afficher(); }); }
+      }); });
+    };
+    ov.querySelector("#rgFermer").addEventListener("click", function(){ ov.remove(); });
+    ov.querySelector("#rgAjouter").addEventListener("click", function(){ ov.querySelector("#rgFichier").click(); });
+    ov.querySelector("#rgFichier").addEventListener("change", async function(){
+      var f=this.files&&this.files[0]; if(!f) return;
+      try{ var m=await publierRealisation(f, {}); if(m) liste=await chargerRealisations(); afficher(); } catch(e){ toast("Échec : "+e.message); }
+    });
+    chargerRealisations().then(function(l){ liste=l; afficher(); }).catch(function(e){ ov.querySelector("#rgListe").innerHTML='<div class="hint">Impossible de charger : '+esc(e.message)+' (fonction Supabase à redéployer ?)</div>'; });
+  }
+
+  // ===================== AVIS GOOGLE : DEMANDE DÈS QUE LA COMMANDE EST LIVRÉE =====================
+  function messageAvis(o, langue){
+    var c=clientDe(o.clientId), nom=c.contactPerson||c.name||"", lien=(invoiceSettings&&invoiceSettings.lienAvisGoogle)||"";
+    if(langue==="ar") return "السلام عليكم "+nom+"،\n\nشكرا بزاف على الطلبية ديالكم! نتمناو الأكياس عجباتكم 🙏"
+      +(lien ? "\n\nإلا كنتو راضيين، تقييم صغير على Google غادي يعاونا بزاف ⭐ :\n"+lien : "\n\nإلا عجبكم الخدمة ديالنا، نصحو بينا صحابكم 🙏")+"\n\nEZPAC";
+    return messageRelance({ type:"avis", cmd:o });
+  }
+  // L'avis est noté comme demandé (il disparaît alors des relances « ⭐ »)
+  function noterAvisDemande(o, etapes){
+    var prod=Object.assign({}, (o.production && typeof o.production==="object") ? o.production : {}, etapes ? { etapes:etapes } : {}, { avisDemande:new Date().toISOString() });
+    return api({ action:"saveOrder", order:{ id:o.id, production:prod } });
+  }
+  function proposerAvis(o, etapes){
+    if(o.production && o.production.avisDemande) return;
+    var c=clientDe(o.clientId), langue="fr";
+    var ov=document.createElement("div"); ov.className="overlay open";
+    ov.innerHTML='<div class="modal" style="max-width:560px;"><h3>🎉 Commande livrée — demander un avis Google ?</h3>'
+      +'<div class="sub" style="margin-bottom:8px;">'+esc(c.name||"")+' · '+esc(o.title||"")+'</div>'
+      +((invoiceSettings&&invoiceSettings.lienAvisGoogle) ? '' :
+        '<div class="field"><label>⭐ Lien d\'avis de votre fiche Google <span class="hint">(fiche Google → « Demander des avis » → copier le lien)</span></label>'
+        +'<div class="item-row" style="gap:6px;"><input id="avLien" type="url" placeholder="https://g.page/r/…/review" style="flex:1;">'
+        +(appRole==="admin"?'<button type="button" class="btn btn-ghost btn-sm" id="avLienOk" data-mut="1">Enregistrer</button>':'')+'</div></div>')
+      +'<div class="item-row" style="gap:6px;margin-bottom:6px;"><button type="button" class="btn btn-primary btn-sm" data-av-langue="fr">Français</button><button type="button" class="btn btn-ghost btn-sm" data-av-langue="ar">الدارجة</button></div>'
+      +'<textarea id="avMsg" rows="9" style="width:100%;"></textarea>'
+      +(c.phone?'':'<div class="hint" style="color:var(--danger);">Pas de téléphone dans la fiche client : copiez le message.</div>')
+      +'<div class="modal-actions"><button type="button" class="btn btn-ghost" id="avPlusTard">Plus tard</button><button type="button" class="btn btn-ghost" id="avCopier">📋 Copier</button>'
+      +(c.phone?'<button type="button" class="btn btn-gold" id="avEnvoyer" data-mut="1">💬 Envoyer sur WhatsApp</button>':'')+'</div>'
+      +'<div class="hint" style="margin-top:6px;">« Plus tard » : la demande reste dans 🔔 Relances pendant 30 jours.</div></div>';
+    document.body.appendChild(ov);
+    var majMsg=function(){ $("avMsg").value=messageAvis(o, langue);
+      Array.prototype.forEach.call(ov.querySelectorAll("[data-av-langue]"), function(b){ b.className="btn btn-sm "+(b.getAttribute("data-av-langue")===langue?"btn-primary":"btn-ghost"); }); };
+    majMsg();
+    Array.prototype.forEach.call(ov.querySelectorAll("[data-av-langue]"), function(b){ b.addEventListener("click", function(){ langue=b.getAttribute("data-av-langue"); $("avMsg").dir=langue==="ar"?"rtl":"ltr"; majMsg(); }); });
+    var lienSaisi=function(){ var v=$("avLien") ? $("avLien").value.trim() : ""; if(v && /^https?:\/\//.test(v)){ invoiceSettings=Object.assign({}, invoiceSettings||{}, { lienAvisGoogle:v }); majMsg(); } return v; };
+    if($("avLien")) $("avLien").addEventListener("change", lienSaisi);
+    if($("avLienOk")) $("avLienOk").addEventListener("click", function(){
+      var v=lienSaisi(); if(!v){ toast("Collez d'abord le lien"); return; }
+      api({ action:"saveSettings", settings:invoiceSettings }).then(function(){ toast("Lien d'avis enregistré ✅"); }).catch(function(e){ toast("Échec : "+e.message); });
+    });
+    var fermer=function(){ ov.remove(); };
+    $("avPlusTard").addEventListener("click", fermer);
+    $("avCopier").addEventListener("click", function(){
+      var t=$("avMsg").value;
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).catch(function(){ $("avMsg").select(); document.execCommand("copy"); });
+      noterAvisDemande(o, etapes).then(function(){ toast("Message copié — avis noté comme demandé"); refresh(); }); fermer();
+    });
+    if($("avEnvoyer")) $("avEnvoyer").addEventListener("click", function(){
+      openWhatsapp(c.phone, $("avMsg").value);
+      noterAvisDemande(o, etapes).then(function(){ toast("Demande d'avis envoyée ⭐"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); }); fermer();
+    });
+  }
+
+  // ===================== PRIX AU KG : SURFACE DE TISSU → POIDS → PRIX, POUR N'IMPORTE QUELLE TAILLE =====================
+  var TYPES_KG={ anse:"Sac à anses", poignee:"Sac à poignée", bretelle:"Sac à bretelles", box:"Premium Box" };
+  var REGLAGES_KG={ chutes:5, ourlet:3, bande:5 }; // % de chutes, ourlet du haut (cm), largeur de coupe d'une anse (cm)
+  // Surface de tissu d'un sac (dimensions en cm) → m², avec le détail du calcul
+  function surfaceSacKg(type, L, H, S, HA, rg){
+    rg=rg||REGLAGES_KG; L=Number(L)||0; H=Number(H)||0; S=Number(S)||0; HA=Number(HA)||0;
+    var d=[], t=0, aj=function(lib, cm2){ if(cm2>0){ d.push([lib, cm2]); t+=cm2; } };
+    if(type==="bretelle"){ aj("Corps (tube "+(S?"avec soufflets latéraux":"")+")", 2*(L+S)*H); }
+    else {
+      aj("Faces avant + arrière", 2*L*H);
+      if(type==="box") aj("Soufflets latéraux", 2*S*H);
+      if(S) aj("Soufflet du fond", L*S);
+      aj("Ourlet du haut", (type==="box" ? 2*(L+S) : 2*L)*(Number(rg.ourlet)||0));
+      if(type==="anse"||type==="box"){
+        var h=HA>0 ? HA : (type==="box" ? 11.5 : 25), rx=L*0.25, demi=Math.PI*Math.sqrt((rx*rx+h*h)/2);
+        aj("2 anses ("+Math.round(demi+8)+" × "+rg.bande+" cm)", 2*(demi+8)*(Number(rg.bande)||0));
+      }
+    }
+    var chutes=t*(Number(rg.chutes)||0)/100; if(chutes) d.push(["Chutes ("+rg.chutes+" %)", chutes]);
+    return { m2:(t+chutes)/10000, detail:d };
+  }
+  function grammageProduit(p){ var m=String(p.grammage||"").match(/\d+/) || String(p.name||"").match(/(\d+)\s*(?:g\b|gr\b|g\/m|gsm)/i); return m ? Number(m[1] || m[0]) : 0; }
+  // Produits du catalogue utilisables : type, dimensions, grammage, prix à la pièce
+  function produitsMesurables(rg){
+    return products.map(function(p){
+      if(/kg/i.test(p.unit||"")) return null;
+      var type=typeSacDepuisTexte(p.name+" "+(p.notes||"")), dm=dimsDepuisTexte(p.dimensions)||dimsDepuisTexte(p.name), g=grammageProduit(p);
+      if(!type || !dm || !g) return null;
+      var s=surfaceSacKg(type, dm.L/10, dm.H/10, dm.S/10, 0, rg), kg=s.m2*g/1000;
+      return { p:p, type:type, L:dm.L/10, H:dm.H/10, S:dm.S/10, g:g, m2:s.m2, kg:kg,
+        vente:Number(p.unitPrice)||0, achat:Number(p.purchasePrice)||0, sansImp:Number(p.plainPrice)||0 };
+    }).filter(Boolean);
+  }
+  // Ajustement prix = a (coût fixe par sac : façon, impression) + b × kg ; a jamais négatif
+  function ajuster(points){
+    points=points.filter(function(x){ return x.kg>0 && x.prix>0; });
+    if(!points.length) return null;
+    var n=points.length, mx=0, my=0; points.forEach(function(x){ mx+=x.kg; my+=x.prix; }); mx/=n; my/=n;
+    var sxx=0, sxy=0; points.forEach(function(x){ sxx+=(x.kg-mx)*(x.kg-mx); sxy+=(x.kg-mx)*(x.prix-my); });
+    var a=0, b=0;
+    if(n>=2 && sxx>1e-9){ b=sxy/sxx; a=my-b*mx; }
+    if(n<2 || sxx<=1e-9 || a<0 || b<=0){ // pas assez de tailles différentes : prix proportionnel au poids
+      var num=0, den=0; points.forEach(function(x){ num+=x.prix*x.kg; den+=x.kg*x.kg; }); a=0; b=num/den;
+    }
+    var err=0; points.forEach(function(x){ err+=Math.abs(a+b*x.kg-x.prix)/x.prix; });
+    return { a:Math.round(a*1000)/1000, b:Math.round(b*100)/100, n:n, ecart:Math.round(100*err/n) };
+  }
+  function mediane(v){ v=v.slice().sort(function(x,y){ return x-y; }); return v.length ? (v.length%2 ? v[(v.length-1)/2] : (v[v.length/2-1]+v[v.length/2])/2) : null; }
+  // Remises par quantité : rapport prix du palier / prix de base, médiane par quantité
+  function paliersMoyens(liste){
+    var parQte={};
+    liste.forEach(function(x){ (x.p.priceTiers||[]).forEach(function(t){ var q=Number(t.minQty), pr=Number(t.unitPrice); if(q>0 && pr>0 && x.vente>0) (parQte[q]=parQte[q]||[]).push(pr/x.vente); }); });
+    return Object.keys(parQte).map(Number).sort(function(a,b){ return a-b; }).map(function(q){ return { minQty:q, ratio:Math.round(mediane(parQte[q])*1000)/1000 }; });
+  }
+  function calibrerModeleKg(rg){
+    var liste=produitsMesurables(rg), modele={ reglages:rg, types:{}, date:new Date().toISOString() };
+    var tous={ vente:ajuster(liste.map(function(x){ return { kg:x.kg, prix:x.vente }; })), achat:ajuster(liste.map(function(x){ return { kg:x.kg, prix:x.achat }; })) };
+    var ratioSans=mediane(liste.filter(function(x){ return x.sansImp>0 && x.vente>0; }).map(function(x){ return x.sansImp/x.vente; }));
+    Object.keys(TYPES_KG).forEach(function(t){
+      var l=liste.filter(function(x){ return x.type===t; });
+      var v=ajuster(l.map(function(x){ return { kg:x.kg, prix:x.vente }; })), ac=ajuster(l.map(function(x){ return { kg:x.kg, prix:x.achat }; }));
+      var sa=ajuster(l.map(function(x){ return { kg:x.kg, prix:x.sansImp }; })), pal=paliersMoyens(l);
+      modele.types[t]={ a:(v||tous.vente||{a:0}).a, b:(v||tous.vente||{b:0}).b, n:v?v.n:0, ecart:v?v.ecart:null, global:!v,
+        achatA:(ac||tous.achat||{a:0}).a, achatB:(ac||tous.achat||{b:0}).b,
+        sansA:sa?sa.a:null, sansB:sa?sa.b:null, ratioSans:ratioSans ? Math.round(ratioSans*1000)/1000 : null,
+        paliers:pal.length ? pal : paliersMoyens(liste) };
+    });
+    return { modele:modele, liste:liste };
+  }
+  function modeleKgEnregistre(){ return invoiceSettings && invoiceSettings.modelePrixKg && invoiceSettings.modelePrixKg.types ? invoiceSettings.modelePrixKg : null; }
+  // Prix d'un sac de n'importe quelle taille avec le modèle
+  function prixAuKg(modele, type, L, H, S, HA, g, qte, sansImpression){
+    var m=modele && modele.types[type]; if(!m || !(m.b>0)) return null;
+    var s=surfaceSacKg(type, L, H, S, HA, modele.reglages), kg=s.m2*g/1000;
+    var base=m.a+m.b*kg, ratio=1;
+    (m.paliers||[]).forEach(function(t){ if(qte>=t.minQty) ratio=t.ratio; });
+    var unit=base*ratio;
+    if(sansImpression) unit = (m.sansB>0 ? (m.sansA+m.sansB*kg)*ratio : (m.ratioSans ? unit*m.ratioSans : null));
+    var achat=(m.achatB>0) ? m.achatA+m.achatB*kg : null;
+    return { surface:s, kg:kg, poidsG:kg*1000, unitaire:unit!=null ? Math.round(unit*100)/100 : null, base:Math.round(base*100)/100, ratio:ratio,
+      achat:achat!=null ? Math.round(achat*100)/100 : null, prixKg:unit!=null ? unit/kg : null };
+  }
+  function ouvrirPrixKg(){
+    var rg=Object.assign({}, REGLAGES_KG, (modeleKgEnregistre()||{}).reglages||{});
+    var cal=calibrerModeleKg(rg), modele=modeleKgEnregistre() ? JSON.parse(JSON.stringify(modeleKgEnregistre())) : cal.modele;
+    var ov=document.createElement("div"); ov.className="overlay open";
+    ov.innerHTML='<div class="modal" style="max-width:980px;"><h3>⚖️ Prix au kg et calcul pour toute taille</h3>'
+      +'<div class="hint" style="margin-bottom:8px;">Surface de tissu (faces, soufflets, ourlet, anses, chutes) × grammage = poids du sac. Le prix au kg est calculé à partir de vos produits : <b>prix = coût fixe par sac + prix au kg × poids</b>, puis remises par quantité.</div>'
+      +'<div class="field-row"><div class="field"><label>Chutes (%)</label><input id="kgChutes" type="number" step="0.5" value="'+rg.chutes+'"></div>'
+      +'<div class="field"><label>Ourlet du haut (cm)</label><input id="kgOurlet" type="number" step="0.5" value="'+rg.ourlet+'"></div>'
+      +'<div class="field"><label>Largeur coupe d\'une anse (cm)</label><input id="kgBande" type="number" step="0.5" value="'+rg.bande+'"></div>'
+      +'<div class="field" style="align-self:end;"><button type="button" class="btn btn-ghost btn-sm" id="kgRecalibrer">↻ Recalculer depuis les produits</button></div></div>'
+      +'<div class="section-head"><h3>🧮 Calculer un sac</h3></div>'
+      +'<div class="field-row"><div class="field"><label>Modèle</label><select id="kcType">'+Object.keys(TYPES_KG).map(function(k){ return '<option value="'+k+'">'+TYPES_KG[k]+'</option>'; }).join("")+'</select></div>'
+      +'<div class="field"><label>Largeur (cm)</label><input id="kcL" type="number" step="0.5" value="35"></div><div class="field"><label>Hauteur (cm)</label><input id="kcH" type="number" step="0.5" value="45"></div>'
+      +'<div class="field"><label>Soufflet (cm)</label><input id="kcS" type="number" step="0.5" value="0"></div><div class="field"><label>Hauteur anses (cm, 0 = auto)</label><input id="kcHA" type="number" step="0.5" value="0"></div></div>'
+      +'<div class="field-row"><div class="field"><label>Grammage (g/m²)</label><input id="kcG" type="number" value="80"></div><div class="field"><label>Quantité</label><input id="kcQ" type="number" value="1000"></div>'
+      +'<div class="field"><label>Impression</label><select id="kcImp"><option value="1">Imprimé</option><option value="0">Sans impression</option></select></div></div>'
+      +'<div id="kcRes" class="summary-bar" style="display:block;line-height:1.7;"></div>'
+      +'<div class="item-row" style="gap:6px;margin:6px 0 14px;"><button type="button" class="btn btn-gold btn-sm" id="kcCreer" data-mut="1">➕ Créer ce produit avec ces prix</button></div>'
+      +'<div class="section-head"><h3>📊 Modèle par type de sac</h3></div><div id="kgModele" style="overflow-x:auto;"></div>'
+      +'<div class="section-head"><h3>📦 Vos produits : surface, poids, prix au kg</h3></div><div id="kgProduits" style="overflow-x:auto;"></div>'
+      +'<div class="modal-actions"><button type="button" class="btn btn-ghost" id="kgFermer">Fermer</button>'
+      +(appRole==="admin"?'<button type="button" class="btn btn-primary" id="kgEnregistrer" data-mut="1">💾 Enregistrer le modèle (CRM + site)</button>':'')+'</div></div>';
+    document.body.appendChild(ov);
+    var td='style="padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap;"', th='style="padding:4px 6px;text-align:left;border-bottom:2px solid var(--line);white-space:nowrap;"';
+    var afficherModele=function(){
+      ov.querySelector("#kgModele").innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12.5px;"><tr><th '+th+'>Type</th><th '+th+'>Prix au kg (vente)</th><th '+th+'>Coût fixe / sac</th><th '+th+'>Achat : MAD/kg + fixe</th><th '+th+'>Produits</th><th '+th+'>Écart moyen</th><th '+th+'>Remises quantité</th></tr>'
+        +Object.keys(TYPES_KG).map(function(t){ var m=modele.types[t]||{};
+          return '<tr><td '+td+'>'+TYPES_KG[t]+'</td><td '+td+'><input data-kg-b="'+t+'" type="number" step="0.5" value="'+(m.b||0)+'" style="width:90px;"> MAD/kg</td>'
+            +'<td '+td+'><input data-kg-a="'+t+'" type="number" step="0.01" value="'+(m.a||0)+'" style="width:80px;"> MAD</td>'
+            +'<td '+td+'>'+(m.achatB?nf(m.achatB)+' /kg + '+nf(m.achatA):'—')+'</td>'
+            +'<td '+td+'>'+(m.n||0)+(m.global?' <span class="hint">(modèle global)</span>':'')+'</td><td '+td+'>'+(m.ecart!=null?'± '+m.ecart+' %':'—')+'</td>'
+            +'<td '+td+'>'+((m.paliers||[]).map(function(p){ return '≥'+p.minQty+' : ×'+p.ratio; }).join(" · ")||'—')+'</td></tr>'; }).join("")+'</table>'
+        +'<div class="hint">Vous pouvez corriger le prix au kg et le coût fixe à la main. « Écart moyen » : différence entre le modèle et vos prix réels.</div>';
+      Array.prototype.forEach.call(ov.querySelectorAll("[data-kg-b],[data-kg-a]"), function(inp){ inp.addEventListener("input", function(){
+        var t=inp.getAttribute("data-kg-b")||inp.getAttribute("data-kg-a"), k=inp.hasAttribute("data-kg-b")?"b":"a"; modele.types[t][k]=Number(inp.value)||0; calculer(); }); });
+    };
+    var afficherProduits=function(){
+      var l=cal.liste;
+      ov.querySelector("#kgProduits").innerHTML = l.length ? '<table style="width:100%;border-collapse:collapse;font-size:12.5px;"><tr><th '+th+'>Produit</th><th '+th+'>Dimensions</th><th '+th+'>g/m²</th><th '+th+'>Surface</th><th '+th+'>Poids</th><th '+th+'>Prix vente</th><th '+th+'>Vente / kg</th><th '+th+'>Achat / kg</th><th '+th+'>Modèle</th></tr>'
+        +l.map(function(x){ var r=prixAuKg(modele, x.type, x.L, x.H, x.S, 0, x.g, 1, false);
+          return '<tr><td '+td+'>'+esc(x.p.name)+'</td><td '+td+'>'+x.L+'×'+x.H+(x.S?' (S '+x.S+')':'')+' cm</td><td '+td+'>'+x.g+'</td><td '+td+'>'+nf(Math.round(x.m2*10000))+' cm²</td><td '+td+'>'+nf(Math.round(x.kg*10000)/10)+' g</td>'
+            +'<td '+td+'>'+(x.vente?nf(x.vente):'—')+'</td><td '+td+'><b>'+(x.vente?nf(Math.round(x.vente/x.kg*100)/100):'—')+'</b></td><td '+td+'>'+(x.achat?nf(Math.round(x.achat/x.kg*100)/100):'—')+'</td><td '+td+'>'+(r&&r.unitaire?nf(r.unitaire):'—')+'</td></tr>'; }).join("")+'</table>'
+        : '<div class="hint">Aucun produit exploitable : il faut un nom qui indique le type (anse, poignée, bretelle, box), les dimensions (ex. 30x40 ou 40x50 soufflet 10) et le grammage.</div>';
+    };
+    var lire=function(){ var v=function(id){ return Number($(id).value)||0; };
+      return { type:$("kcType").value, L:v("kcL"), H:v("kcH"), S:v("kcS"), HA:v("kcHA"), g:v("kcG"), q:Math.max(1, v("kcQ")), sans:$("kcImp").value==="0" }; };
+    var calculer=function(){
+      var x=lire(), r=prixAuKg(modele, x.type, x.L, x.H, x.S, x.HA, x.g, x.q, x.sans);
+      if(!r){ $("kcRes").innerHTML="Pas de prix au kg pour ce type : ajoutez des produits de ce type (dimensions + grammage + prix) ou saisissez un prix au kg ci-dessous."; return; }
+      $("kcRes").innerHTML='📐 Surface : <b>'+nf(Math.round(r.surface.m2*10000))+' cm²</b> ('+r.surface.detail.map(function(d){ return d[0]+' '+Math.round(d[1]); }).join(" + ")+')<br>'
+        +'⚖️ Poids : <b>'+nf(Math.round(r.poidsG*10)/10)+' g</b> par sac → '+nf(Math.round(r.kg*x.q*10)/10)+' kg pour '+x.q+' sacs<br>'
+        +(r.unitaire!=null ? '💰 Prix : <b>'+nf(r.unitaire)+' MAD HT / sac</b>'+(r.ratio!==1?' (remise quantité ×'+r.ratio+')':'')+' → <b>'+nf(r.unitaire*x.q)+' MAD HT</b> · soit '+nf(Math.round(r.prixKg*100)/100)+' MAD/kg'
+          : '💰 Pas de prix « sans impression » dans le catalogue pour estimer ce cas')
+        +(r.achat!=null && r.unitaire!=null ? '<br>🏭 Prix de revient ≈ '+nf(r.achat)+' MAD / sac · marge ≈ <b>'+nf(r.unitaire-r.achat)+' MAD</b> ('+Math.round(100*(r.unitaire-r.achat)/r.unitaire)+' %)' : '');
+    };
+    ["kcType","kcL","kcH","kcS","kcHA","kcG","kcQ","kcImp"].forEach(function(id){ $(id).addEventListener("input", calculer); $(id).addEventListener("change", calculer); });
+    var recal=function(){
+      rg={ chutes:Number($("kgChutes").value)||0, ourlet:Number($("kgOurlet").value)||0, bande:Number($("kgBande").value)||0 };
+      cal=calibrerModeleKg(rg); modele=cal.modele; afficherModele(); afficherProduits(); calculer();
+    };
+    ov.querySelector("#kgRecalibrer").addEventListener("click", recal);
+    ["kgChutes","kgOurlet","kgBande"].forEach(function(id){ $(id).addEventListener("change", recal); });
+    ov.querySelector("#kgFermer").addEventListener("click", function(){ ov.remove(); });
+    if($("kgEnregistrer")) $("kgEnregistrer").addEventListener("click", function(){
+      var btn=this; btn.disabled=true; modele.date=new Date().toISOString();
+      var st=Object.assign({}, invoiceSettings||{}, { modelePrixKg:modele });
+      api({ action:"saveSettings", settings:st }).then(function(){ invoiceSettings=st; toast("Modèle prix au kg enregistré ✅ (utilisé aussi pour les estimations du site)"); })
+        .catch(function(e){ toast("Échec : "+e.message); }).then(function(){ btn.disabled=false; });
+    });
+    ov.querySelector("#kcCreer").addEventListener("click", function(){
+      var x=lire(), r=prixAuKg(modele, x.type, x.L, x.H, x.S, x.HA, x.g, 1, false); if(!r || r.unitaire==null){ toast("Pas de prix calculable"); return; }
+      var m=modele.types[x.type], pal=(m.paliers||[]).map(function(t){ return { minQty:t.minQty, unitPrice:Math.round(r.base*t.ratio*100)/100 }; });
+      var sans=prixAuKg(modele, x.type, x.L, x.H, x.S, x.HA, x.g, 1, true);
+      var nom=TYPES_KG[x.type]+" "+x.L+"×"+x.H+" cm"+(x.S?" soufflet "+x.S:"")+" "+x.g+" g";
+      if(products.some(function(p){ return String(p.name).toLowerCase()===nom.toLowerCase(); })){ toast("Ce produit existe déjà"); return; }
+      if(!confirm("Créer le produit « "+nom+" » à "+nf(r.base)+" MAD HT / sac ?")) return;
+      api({ action:"saveProduct", product:{ name:nom, dimensions:x.L+"x"+x.H+(x.S?" soufflet "+x.S:"")+" cm", grammage:String(x.g), unit:"pièce", unitPrice:r.base, priceTiers:pal,
+        plainPrice:sans && sans.unitaire!=null ? sans.unitaire : null, purchasePrice:r.achat, notes:"Prix calculé au kg ("+nf(Math.round(r.base/r.kg*100)/100)+" MAD/kg, "+nf(Math.round(r.poidsG*10)/10)+" g/sac)" } })
+        .then(function(){ toast("Produit créé ✅"); refresh(); }).catch(function(e){ toast("Échec : "+e.message); });
+    });
+    afficherModele(); afficherProduits(); calculer();
+    if(!modeleKgEnregistre() && appRole==="admin") toast("Modèle calculé depuis vos produits : vérifiez-le puis « Enregistrer le modèle »");
   }
 
   // ===================== IMPORT DE FACTURES EXISTANTES =====================
@@ -4504,6 +5037,7 @@
              produits: ordre.filter(function(p){ return ids.indexOf(String(p.id))!==-1; }) };
   }
   $("catalogueBtn").addEventListener("click", ouvrirCatalogue);
+  $("prixKgBtn").addEventListener("click", ouvrirPrixKg);
   $("catAnnuler").addEventListener("click", function(){ $("catalogueOverlay").classList.remove("open"); });
   $("catalogueOverlay").addEventListener("click", function(e){ if(e.target===this) this.classList.remove("open"); });
   $("catToutCocher").addEventListener("click", function(){
@@ -5341,6 +5875,8 @@
       renderRelanceDetail(currentId.relances ? relancesDuJour().find(function(r){ return r.type+":"+r.cle===currentId.relances; }) : null);
     } else if(activeTab==="agenda"){
       renderAgendaDetail();
+    } else if(activeTab==="publications"){
+      renderPublicationDetail();
     } else if(activeTab==="atelier"){
       renderAtelierDetail();
     } else if(activeTab==="prospects"){
@@ -6023,6 +6559,7 @@
     $("kpiRow").innerHTML += kpisGestion();
     renderRappels();
     renderTresorerie();
+    if($("dashPublications")) $("dashPublications").innerHTML=htmlTopPublications();
 
     var parMois={}, dateParMois={};
     factures().forEach(function(d){ var m=fmtMonth(d.date); parMois[m]=(parMois[m]||0)+(d.totalTTC||0); if(!dateParMois[m]) dateParMois[m]=d.date; });
